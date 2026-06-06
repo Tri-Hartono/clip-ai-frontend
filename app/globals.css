@@ -1,8 +1,8 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #f0faf8;
+  --foreground: #0d3b35;
 }
 
 @theme inline {
@@ -10,17 +10,345 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  
+  --color-brand: #03897B;
+  --color-brand-dark: #026b5f;
+  --color-brand-light: #e6f7f5;
+  --color-brand-accent: #05b3a1;
+  --color-brand-soft: #ccede9;
+
+  --animate-float-slow: float-slow 8s ease-in-out infinite;
+  --animate-float-medium: float-medium 5s ease-in-out infinite;
+  --animate-float-fast: float-fast 3s ease-in-out infinite;
+  --animate-pulse-slow: pulse-slow 4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  --animate-slide-in-up: slide-in-up 0.6s cubic-bezier(0.22,1,0.36,1) both;
+  --animate-fade-in: fade-in 0.5s ease both;
+  --animate-shimmer: shimmer 2.5s linear infinite;
+  --animate-spin-slow: spin 8s linear infinite;
+  --animate-bounce-slow: bounce-slow 2s ease-in-out infinite;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+@keyframes float-slow {
+  0%, 100% { transform: translateY(0px) rotate(0deg); }
+  50% { transform: translateY(-18px) rotate(1.5deg); }
+}
+
+@keyframes float-medium {
+  0%, 100% { transform: translateY(0px) translateX(0px); }
+  33% { transform: translateY(-10px) translateX(8px); }
+  66% { transform: translateY(-5px) translateX(-5px); }
+}
+
+@keyframes float-fast {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-6px); }
+}
+
+@keyframes pulse-slow {
+  0%, 100% { opacity: 0.15; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(1.08); }
+}
+
+@keyframes slide-in-up {
+  from { opacity: 0; transform: translateY(32px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% center; }
+  100% { background-position: 200% center; }
+}
+
+@keyframes bounce-slow {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+
+@keyframes typing-blink {
+  0%, 100% { border-color: #03897B; }
+  50% { border-color: transparent; }
+}
+
+@keyframes gradient-shift {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+@keyframes ripple {
+  0% { transform: scale(0.95); opacity: 1; }
+  100% { transform: scale(1.6); opacity: 0; }
+}
+
+@keyframes marquee {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+  overflow-x: hidden;
+}
+
+/* Hero animated gradient text */
+.gradient-text-animated {
+  background: linear-gradient(135deg, #03897B 0%, #05b3a1 30%, #0dcfbb 60%, #03897B 100%);
+  background-size: 300% 300%;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: gradient-shift 4s ease infinite;
+}
+
+/* Shimmer effect for CTAs */
+.shimmer-btn {
+  background: linear-gradient(90deg, #03897B 0%, #05b3a1 50%, #03897B 100%);
+  background-size: 200% auto;
+  animation: shimmer 2.5s linear infinite;
+}
+
+/* Marquee animation */
+.animate-marquee {
+  animation: marquee 25s linear infinite;
+}
+
+/* Ripple pulse around icons */
+.ripple-pulse::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: rgba(3, 137, 123, 0.3);
+  animation: ripple 2s ease-out infinite;
+}
+
+/* Custom Scrollbar styles */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #e6f7f5;
+}
+::-webkit-scrollbar-thumb {
+  background: #03897B;
+  border-radius: 9999px;
+  opacity: 0.5;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #026b5f;
+}
+
+/* Glass card */
+.glass-card {
+  background: rgba(255, 255, 255, 0.75);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(3, 137, 123, 0.12);
+}
+
+/* ===== Video Timeline Editor Styles ===== */
+
+.timeline-track {
+  background: linear-gradient(180deg, #0f172a 0%, #1e293b 100%);
+  border-radius: 16px;
+  border: 1px solid rgba(51, 65, 85, 0.6);
+  position: relative;
+  min-height: 90px;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.timeline-track::-webkit-scrollbar {
+  height: 5px;
+}
+.timeline-track::-webkit-scrollbar-track {
+  background: #1e293b;
+  border-radius: 0 0 16px 16px;
+}
+.timeline-track::-webkit-scrollbar-thumb {
+  background: #03897B;
+  border-radius: 9999px;
+}
+
+.timeline-clip {
+  background: linear-gradient(135deg, rgba(3, 137, 123, 0.25) 0%, rgba(5, 179, 161, 0.15) 100%);
+  border: 1.5px solid rgba(3, 137, 123, 0.5);
+  border-radius: 12px;
+  position: relative;
+  cursor: grab;
+  transition: all 0.25s cubic-bezier(0.22, 1, 0.36, 1);
+  overflow: hidden;
+  flex-shrink: 0;
+  user-select: none;
+}
+
+.timeline-clip:hover {
+  border-color: rgba(3, 137, 123, 0.8);
+  box-shadow: 0 0 16px rgba(3, 137, 123, 0.2), inset 0 1px 0 rgba(255,255,255,0.06);
+  transform: translateY(-1px);
+}
+
+.timeline-clip.selected {
+  border-color: #03897B;
+  box-shadow: 0 0 20px rgba(3, 137, 123, 0.35), 0 0 0 2px rgba(3, 137, 123, 0.15);
+}
+
+.timeline-clip.dragging {
+  opacity: 0.45;
+  border-style: dashed;
+  cursor: grabbing;
+  transform: scale(0.96);
+}
+
+.timeline-clip:active {
+  cursor: grabbing;
+}
+
+.timeline-drop-zone {
+  border: 2px dashed transparent;
+  border-radius: 12px;
+  transition: all 0.2s ease;
+  min-width: 6px;
+  flex-shrink: 0;
+}
+
+.timeline-drop-zone.active {
+  border-color: #05b3a1;
+  background: rgba(5, 179, 161, 0.1);
+  min-width: 48px;
+  animation: drop-zone-pulse 1s ease-in-out infinite;
+}
+
+@keyframes drop-zone-pulse {
+  0%, 100% { background: rgba(5, 179, 161, 0.08); }
+  50% { background: rgba(5, 179, 161, 0.2); }
+}
+
+.timeline-playhead {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: #ef4444;
+  z-index: 30;
+  pointer-events: none;
+  transition: left 0.05s linear;
+}
+
+.timeline-playhead::before {
+  content: '';
+  position: absolute;
+  top: -4px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 10px;
+  height: 10px;
+  background: #ef4444;
+  border-radius: 50% 50% 50% 50%;
+  clip-path: polygon(0 0, 100% 0, 50% 100%);
+  box-shadow: 0 0 8px rgba(239, 68, 68, 0.5);
+}
+
+.timeline-playhead::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -1px;
+  right: -1px;
+  background: rgba(239, 68, 68, 0.15);
+  filter: blur(4px);
+}
+
+.clip-trim-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 10px;
+  cursor: col-resize;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+
+.clip-trim-handle::after {
+  content: '';
+  width: 3px;
+  height: 24px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.25);
+  transition: all 0.15s ease;
+}
+
+.clip-trim-handle:hover::after {
+  background: #03897B;
+  height: 32px;
+  box-shadow: 0 0 8px rgba(3, 137, 123, 0.4);
+}
+
+.clip-trim-handle.left {
+  left: 0;
+  border-radius: 12px 0 0 12px;
+}
+
+.clip-trim-handle.right {
+  right: 0;
+  border-radius: 0 12px 12px 0;
+}
+
+/* Clip enter animation */
+@keyframes clip-enter {
+  from { opacity: 0; transform: scaleX(0.8); }
+  to { opacity: 1; transform: scaleX(1); }
+}
+
+.timeline-clip-enter {
+  animation: clip-enter 0.35s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* Clip delete shake */
+@keyframes clip-shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-4px); }
+  40% { transform: translateX(4px); }
+  60% { transform: translateX(-3px); }
+  80% { transform: translateX(3px); }
+}
+
+.timeline-clip-shake {
+  animation: clip-shake 0.4s ease;
+}
+
+/* Timeline time ruler marks */
+.timeline-ruler {
+  position: relative;
+  height: 20px;
+  border-bottom: 1px solid rgba(51, 65, 85, 0.4);
+}
+
+.timeline-ruler-mark {
+  position: absolute;
+  bottom: 0;
+  width: 1px;
+  background: rgba(148, 163, 184, 0.3);
+}
+
+.timeline-ruler-label {
+  position: absolute;
+  bottom: 4px;
+  font-size: 8px;
+  font-weight: 700;
+  color: rgba(148, 163, 184, 0.5);
+  transform: translateX(-50%);
+  font-family: monospace;
 }
