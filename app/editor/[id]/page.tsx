@@ -7,6 +7,7 @@ import SubtitleEditor, { SubtitleItem } from "@/components/SubtitleEditor"
 import ExportModal from "@/components/ExportModal"
 import { ViralClips } from "@/components/ViralClips"
 import VideoTimeline, { VideoClip } from "@/components/VideoTimeline"
+import IntroBuilderModal from "@/components/IntroBuilderModal"
 import { ArrowLeft, Video, Download, RefreshCw, Sparkles, X, Scissors, Play as PlayIcon, Pause as PauseIcon, Smartphone, Monitor, RotateCcw, RotateCw, Settings2 } from "lucide-react"
 import { api } from "@/services/api"
 
@@ -21,6 +22,10 @@ export default function EditorPage() {
   const [exportOpen, setExportOpen] = useState(false)
   const [srtContent, setSrtContent] = useState("")
   const [subtitleStyleOpen, setSubtitleStyleOpen] = useState(false)
+
+  // Intro Builder States
+  const [introModalTarget, setIntroModalTarget] = useState<"merge" | "clip" | null>(null)
+  const [pendingClipParams, setPendingClipParams] = useState<{ start: string, end: string, format: "landscape"|"portrait", color: string } | null>(null)
 
   // Watermark States
   const [wmImage, setWmImage] = useState<string | null>(null)
@@ -114,12 +119,24 @@ export default function EditorPage() {
   const [activeClipUrl, setActiveClipUrl] = useState<string | null>(null)
   const [clipStatusMsg, setClipStatusMsg] = useState("")
 
+  // Recovery Draft States
+  const [showRecoveryModal, setShowRecoveryModal] = useState(false)
+  const [savedDraft, setSavedDraft] = useState<any>(null)
+
   useEffect(() => {
     async function loadData() {
       setLoading(true)
       try {
         const videoResp = await api.get(`/api/videos/${id}`)
         setVideo(videoResp.data)
+
+        if (videoResp.data.draftState) {
+          try {
+            const draft = JSON.parse(videoResp.data.draftState)
+            setSavedDraft(draft)
+            setShowRecoveryModal(true)
+          } catch (e) {}
+        }
         
         const subsResp = await api.get(`/api/videos/${id}/subtitles`)
         if (subsResp.data && subsResp.data.length > 0) {
@@ -143,6 +160,46 @@ export default function EditorPage() {
     
     loadData()
   }, [id])
+
+  // Auto-Save Cloud Draft Engine (Debounced 2s)
+  const draftStateTimeout = useRef<NodeJS.Timeout | null>(null)
+  const isInitialMount = useRef(true)
+
+  useEffect(() => {
+    if (isInitialMount.current || showRecoveryModal) {
+      if (!showRecoveryModal) {
+        isInitialMount.current = false
+      }
+      return
+    }
+
+    if (draftStateTimeout.current) {
+      clearTimeout(draftStateTimeout.current)
+    }
+
+    draftStateTimeout.current = setTimeout(async () => {
+      try {
+        const draftObj = {
+          subtitles,
+          clips,
+          clipFormat,
+          selectedColor,
+          captionUppercase,
+          captionFontsize,
+          captionOutline,
+          captionMarginV,
+          wmImage,
+          wmOpacity,
+          wmScale,
+          wmPosition
+        }
+        await api.put(`/api/videos/${id}/draft`, { draftState: JSON.stringify(draftObj) })
+      } catch (err) {
+        console.warn("Auto-save draft failed", err)
+      }
+    }, 2000)
+
+  }, [subtitles, clips, clipFormat, selectedColor, captionUppercase, captionFontsize, captionOutline, captionMarginV, wmImage, wmOpacity, wmScale, wmPosition, showRecoveryModal])
 
   const handleSubtitlesSave = (subs: SubtitleItem[]) => {
     setSubtitles(subs)
@@ -198,10 +255,15 @@ export default function EditorPage() {
     return srtLines.join("\n")
   }
 
-  const handleCutTimeline = async () => {
+  const handleCutTimeline = () => {
     const startTimeStr = formatTimeStrWithMs(trimStart)
     const endTimeStr = formatTimeStrWithMs(trimEnd)
-    await handleClipGenerate(startTimeStr, endTimeStr, clipFormat, selectedColor)
+    triggerClipGenerate(startTimeStr, endTimeStr, clipFormat, selectedColor)
+  }
+
+  const triggerClipGenerate = (start: string, end: string, format: "landscape" | "portrait" = "landscape", color: string = "yellow") => {
+    setPendingClipParams({ start, end, format, color })
+    setIntroModalTarget("clip")
   }
 
   // --- Multi-clip timeline functions ---
@@ -238,7 +300,12 @@ export default function EditorPage() {
   }, [clips, currentTime])
 
   // Merge & Export: call backend to concat clips
-  const handleMergeExport = async () => {
+  const triggerMergeExport = () => {
+    if (clips.length === 0) return
+    setIntroModalTarget("merge")
+  }
+
+  const handleMergeExport = async (introOverlayBase64: string | null = null) => {
     const sorted = [...clips].sort((a, b) => a.order - b.order)
     if (sorted.length === 0) return
 
@@ -268,7 +335,8 @@ export default function EditorPage() {
           scale: wmScale,
           position: wmPosition
         } : null,
-        customSrt
+        customSrt,
+        introOverlay: introOverlayBase64
       })
       if (response.data && response.data.clipUrl) {
         const fullUrl = `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080"}${response.data.clipUrl}`
@@ -306,7 +374,7 @@ export default function EditorPage() {
     }
   }, [currentTime, clips, isPlaying])
 
-  const handleClipGenerate = async (startTime: string, endTime: string, format: "landscape" | "portrait" = "landscape", color: string = "yellow") => {
+  const handleClipGenerate = async (startTime: string, endTime: string, format: "landscape" | "portrait" = "landscape", color: string = "yellow", introOverlayBase64: string | null = null) => {
     setClipping(true)
     setClipStatusMsg("Clippers AI cutting video & hardburning subtitles...")
     
@@ -499,7 +567,7 @@ export default function EditorPage() {
               <span className="hidden sm:inline">Export Subtitle</span>
             </button>
             <button
-              onClick={handleMergeExport}
+              onClick={triggerMergeExport}
               disabled={isMerging || clips.length === 0}
               className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-extrabold shadow-md transition-all active:scale-95 ${
                 isMerging ? "bg-slate-400 text-slate-200 cursor-wait" : "bg-brand hover:bg-brand-dark text-white shadow-brand/20"
@@ -668,7 +736,10 @@ export default function EditorPage() {
                 <SubtitleEditor 
                   initialSubtitles={subtitles} 
                   onSave={handleSubtitlesSave}
-                  onClipGenerate={(start, end) => handleClipGenerate(start, end, clipFormat, selectedColor)}
+                  onClipGenerate={(start, end) => {
+                    setPendingClipParams({ start, end, format: clipFormat, color: selectedColor })
+                    setIntroModalTarget("clip")
+                  }}
                   activeSubId={activeSubId}
                   onSeekTo={(sec) => {
                     if (videoRef.current) {
@@ -695,7 +766,7 @@ export default function EditorPage() {
                   }
                 }}
                 onSplitAtPlayhead={handleSplitAtPlayhead}
-                onMergeExport={handleMergeExport}
+                onMergeExport={triggerMergeExport}
                 isMerging={isMerging}
                 selectedClipId={selectedClipId}
                 onSelectClip={setSelectedClipId}
@@ -707,7 +778,10 @@ export default function EditorPage() {
             <div className="p-8 bg-white border-t border-slate-200/60">
               <ViralClips 
                 videoId={id as string} 
-                onExtractClip={(start, end) => handleClipGenerate(start, end, clipFormat, selectedColor)}
+                onExtractClip={(start, end) => {
+                    setPendingClipParams({ start, end, format: clipFormat, color: selectedColor })
+                    setIntroModalTarget("clip")
+                }}
               />
             </div>
           </div>
@@ -782,9 +856,69 @@ export default function EditorPage() {
           srtContent={srtContent}
         />
 
+        {/* Customizer Modal & Overlays */}
+        <IntroBuilderModal 
+          isOpen={introModalTarget !== null}
+          format={clipFormat}
+          onClose={() => setIntroModalTarget(null)}
+          onExport={(base64) => {
+            setIntroModalTarget(null)
+            if (introModalTarget === "merge") {
+              handleMergeExport(base64)
+            } else if (introModalTarget === "clip" && pendingClipParams) {
+              handleClipGenerate(pendingClipParams.start, pendingClipParams.end, pendingClipParams.format, pendingClipParams.color, base64)
+            }
+          }}
+        />
+
+        {/* Cloud Session Recovery Modal */}
+        {showRecoveryModal && (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/80 backdrop-blur-sm p-4">
+            <div className="bg-white rounded-3xl w-full max-w-md flex flex-col overflow-hidden shadow-2xl animate-in fade-in zoom-in-95">
+              <div className="p-6">
+                <h2 className="text-xl font-extrabold text-slate-800 mb-2">Cloud Save Ditemukan ☁️</h2>
+                <p className="text-sm text-slate-500 font-medium mb-6">
+                  Kami menemukan sesi editan Anda yang belum selesai sebelumnya. Apakah Anda ingin melanjutkannya?
+                </p>
+                <div className="flex flex-col gap-3">
+                  <button 
+                    onClick={() => {
+                      if (savedDraft.subtitles) setSubtitles(savedDraft.subtitles)
+                      if (savedDraft.clips) setClips(savedDraft.clips)
+                      if (savedDraft.clipFormat) setClipFormat(savedDraft.clipFormat)
+                      if (savedDraft.selectedColor) setSelectedColor(savedDraft.selectedColor)
+                      if (savedDraft.captionUppercase !== undefined) setCaptionUppercase(savedDraft.captionUppercase)
+                      if (savedDraft.captionFontsize) setCaptionFontsize(savedDraft.captionFontsize)
+                      if (savedDraft.captionOutline) setCaptionOutline(savedDraft.captionOutline)
+                      if (savedDraft.captionMarginV) setCaptionMarginV(savedDraft.captionMarginV)
+                      if (savedDraft.wmImage) setWmImage(savedDraft.wmImage)
+                      if (savedDraft.wmOpacity) setWmOpacity(savedDraft.wmOpacity)
+                      if (savedDraft.wmScale) setWmScale(savedDraft.wmScale)
+                      if (savedDraft.wmPosition) setWmPosition(savedDraft.wmPosition)
+                      setShowRecoveryModal(false)
+                    }}
+                    className="w-full py-3 bg-brand hover:bg-brand-dark text-white rounded-xl font-bold transition-all shadow-md active:scale-95"
+                  >
+                    Ya, Lanjutkan Editan
+                  </button>
+                  <button 
+                    onClick={async () => {
+                      setShowRecoveryModal(false)
+                      await api.put(`/api/videos/${id}/draft`, { draftState: "" })
+                    }}
+                    className="w-full py-3 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl font-bold transition-all active:scale-95"
+                  >
+                    Tidak, Mulai Baru Saja
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Subtitle Style Customizer Modal */}
         {subtitleStyleOpen && (
-          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 font-sans animate-fade-in">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 backdrop-blur-sm bg-slate-900/60 animate-in fade-in">
             <div className="bg-white border border-slate-200/80 rounded-2xl w-full max-w-2xl shadow-2xl relative flex flex-col max-h-[90vh]">
               {/* Header */}
               <div className="flex items-center justify-between p-5 border-b border-slate-100">
