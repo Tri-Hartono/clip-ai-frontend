@@ -120,6 +120,89 @@ export default function EditorPage() {
   const [clipping, setClipping] = useState(false)
   const [activeClipUrl, setActiveClipUrl] = useState<string | null>(null)
   const [clipStatusMsg, setClipStatusMsg] = useState("")
+  
+  // Dynamic Live Preview Tracking States
+  const [trackingData, setTrackingData] = useState<{t: number, p: number}[] | null>(null)
+  const [isTrackingLoading, setIsTrackingLoading] = useState(false)
+  const animationRef = useRef<number | null>(null)
+
+  // 60FPS Live Preview Panning using requestAnimationFrame
+  useEffect(() => {
+    if (!isPlaying || clipFormat !== "portrait" || !trackingData || trackingData.length === 0) {
+      if (animationRef.current) cancelAnimationFrame(animationRef.current)
+      return
+    }
+
+    const updatePosition = () => {
+      if (!videoRef.current) return
+      
+      const curTime = videoRef.current.currentTime
+      
+      // Binary search
+      let low = 0
+      let high = trackingData.length - 1
+      let mid = 0
+      while (low <= high) {
+        mid = Math.floor((low + high) / 2)
+        if (trackingData[mid].t < curTime) {
+          low = mid + 1
+        } else if (trackingData[mid].t > curTime) {
+          high = mid - 1
+        } else {
+          break
+        }
+      }
+      
+      // Interpolate for buttery smoothness
+      let point1 = trackingData[mid]
+      let point2 = trackingData[mid]
+      
+      if (point1.t <= curTime && mid < trackingData.length - 1) {
+         point2 = trackingData[mid + 1]
+      } else if (point1.t > curTime && mid > 0) {
+         point1 = trackingData[mid - 1]
+         point2 = trackingData[mid]
+      }
+      
+      let p = point1.p
+      if (point2.t > point1.t) {
+        // Linear interpolation between the two closest frames
+        const ratio = (curTime - point1.t) / (point2.t - point1.t)
+        // Add a bit of easing out for extremely fast head turns using easeOutCubic
+        // but linear is usually better for direct tracking, since the tracking data is already EMA smoothed!
+        p = point1.p + (point2.p - point1.p) * ratio
+      }
+      
+      videoRef.current.style.objectPosition = `${p}% center`
+      
+      animationRef.current = requestAnimationFrame(updatePosition)
+    }
+
+    animationRef.current = requestAnimationFrame(updatePosition)
+
+    return () => {
+      if (animationRef.current) cancelAnimationFrame(animationRef.current)
+    }
+  }, [isPlaying, clipFormat, trackingData])
+
+  useEffect(() => {
+    if (clipFormat === "portrait" && !trackingData && !isTrackingLoading && video?.id) {
+      const fetchTracking = async () => {
+        setIsTrackingLoading(true)
+        try {
+          const res = await api.get(`/api/videos/${id}/tracking`)
+          if (res.data && res.data.data) {
+            setTrackingData(res.data.data)
+          }
+        } catch (e) {
+          console.error("Failed to load tracking data for live preview", e)
+        } finally {
+          setIsTrackingLoading(false)
+        }
+      }
+      fetchTracking()
+    }
+  }, [clipFormat, trackingData, isTrackingLoading, id, video])
 
   // Recovery Draft States
   const [showRecoveryModal, setShowRecoveryModal] = useState(false)
@@ -224,56 +307,76 @@ export default function EditorPage() {
     return parseInt(sh) * 3600 + parseInt(sm) * 60 + parseFloat(ss.replace(",", "."))
   }
 
-  const generateMappedSrt = (exportClips: VideoClip[], currentSubtitles: SubtitleItem[]) => {
+  const generateMappedData = (exportClips: VideoClip[], currentSubtitles: SubtitleItem[]) => {
     const sortedClips = [...exportClips].sort((a, b) => a.order - b.order)
     let srtLines: string[] = []
-    let subCounter = 1
+    let mappedJson: SubtitleItem[] = []
+    let srtCounter = 1
+    let jsonCounter = 1
     let currentTimeOffset = 0 // Seconds from the start of the final video
 
     for (const clip of sortedClips) {
       for (const sub of currentSubtitles) {
-        if (singleWordMode && sub.words && sub.words.length > 0) {
-          // Output each word as a separate SRT block
-          for (const word of sub.words) {
-            const wordStart = word.start
-            let wordEnd = word.end
-            // Ensure tiny duration gap for FFmpeg consistency
-            if (wordStart >= wordEnd) wordEnd = wordStart + 0.1
+        const subStart = parseTimeStrToSeconds(sub.startTime)
+        const subEnd = parseTimeStrToSeconds(sub.endTime)
 
-            if (wordEnd > clip.startTime && wordStart < clip.endTime) {
-              const effectiveStart = Math.max(wordStart, clip.startTime)
-              const effectiveEnd = Math.min(wordEnd, clip.endTime)
-              const mappedStart = (effectiveStart - clip.startTime) + currentTimeOffset
-              const mappedEnd = (effectiveEnd - clip.startTime) + currentTimeOffset
+        if (subEnd > clip.startTime && subStart < clip.endTime) {
+          const effectiveStart = Math.max(subStart, clip.startTime)
+          const effectiveEnd = Math.min(subEnd, clip.endTime)
+          const mappedStart = (effectiveStart - clip.startTime) + currentTimeOffset
+          const mappedEnd = (effectiveEnd - clip.startTime) + currentTimeOffset
 
-              srtLines.push(`${subCounter}`)
-              srtLines.push(`${formatTimeStrWithMs(mappedStart)} --> ${formatTimeStrWithMs(mappedEnd)}`)
-              srtLines.push(`${word.word}\n`)
-              subCounter++
+          let mappedWords: {word: string; start: number; end: number}[] = []
+          if (sub.words && sub.words.length > 0) {
+            for (const word of sub.words) {
+              const wordStart = word.start
+              let wordEnd = word.end
+              if (wordStart >= wordEnd) wordEnd = wordStart + 0.1
+
+              if (wordEnd > clip.startTime && wordStart < clip.endTime) {
+                const wStart = Math.max(wordStart, clip.startTime)
+                const wEnd = Math.min(wordEnd, clip.endTime)
+                mappedWords.push({
+                  word: word.word,
+                  start: wStart - clip.startTime + currentTimeOffset,
+                  end: wEnd - clip.startTime + currentTimeOffset
+                })
+              }
             }
           }
-        } else {
-          // Output full sentence
-          const subStart = parseTimeStrToSeconds(sub.startTime)
-          const subEnd = parseTimeStrToSeconds(sub.endTime)
 
-          if (subEnd > clip.startTime && subStart < clip.endTime) {
-            const effectiveStart = Math.max(subStart, clip.startTime)
-            const effectiveEnd = Math.min(subEnd, clip.endTime)
-            const mappedStart = (effectiveStart - clip.startTime) + currentTimeOffset
-            const mappedEnd = (effectiveEnd - clip.startTime) + currentTimeOffset
+          mappedJson.push({
+            id: jsonCounter++,
+            startTime: formatTimeStrWithMs(mappedStart),
+            endTime: formatTimeStrWithMs(mappedEnd),
+            text: sub.text,
+            words: mappedWords
+          })
 
-            srtLines.push(`${subCounter}`)
+          if (singleWordMode && mappedWords.length > 0) {
+            // Output each word as a separate SRT block
+            for (const word of mappedWords) {
+              srtLines.push(`${srtCounter}`)
+              srtLines.push(`${formatTimeStrWithMs(word.start)} --> ${formatTimeStrWithMs(word.end)}`)
+              srtLines.push(`${word.word}\n`)
+              srtCounter++
+            }
+          } else {
+            // Output full sentence
+            srtLines.push(`${srtCounter}`)
             srtLines.push(`${formatTimeStrWithMs(mappedStart)} --> ${formatTimeStrWithMs(mappedEnd)}`)
             srtLines.push(`${sub.text}\n`)
-            subCounter++
+            srtCounter++
           }
         }
       }
       currentTimeOffset += (clip.endTime - clip.startTime)
     }
 
-    return srtLines.join("\n")
+    return {
+      customSrt: srtLines.join("\n"),
+      customJson: JSON.stringify(mappedJson)
+    }
   }
 
   const handleCutTimeline = () => {
@@ -335,7 +438,7 @@ export default function EditorPage() {
     setClipStatusMsg("Merging clips & exporting final video...")
 
     try {
-      const customSrt = generateMappedSrt(sorted, subtitles)
+      const { customSrt, customJson } = generateMappedData(sorted, subtitles)
 
       const response = await api.post(`/api/videos/${id}/merge`, {
         clips: sorted.map(c => ({
@@ -357,6 +460,7 @@ export default function EditorPage() {
           position: wmPosition
         } : null,
         customSrt,
+        customJson,
         introOverlay: introOverlayBase64
       })
       if (response.data && response.data.clipUrl) {
@@ -401,7 +505,7 @@ export default function EditorPage() {
     
     try {
       const singleClip: VideoClip = { id: "clip-1", startTime: parseTimeStrToSeconds(startTime), endTime: parseTimeStrToSeconds(endTime), order: 0 }
-      const customSrt = generateMappedSrt([singleClip], subtitles)
+      const { customSrt, customJson } = generateMappedData([singleClip], subtitles)
 
       const response = await api.post(`/api/videos/${id}/clip`, {
         startTime,
@@ -421,6 +525,7 @@ export default function EditorPage() {
           position: wmPosition
         } : null,
         customSrt,
+        customJson,
         introOverlay: introOverlayBase64
       })
       if (response.data && response.data.clipUrl) {
@@ -451,6 +556,12 @@ export default function EditorPage() {
     if (videoRef.current) {
       const curTime = videoRef.current.currentTime
       setCurrentTime(curTime)
+
+      // Dynamic Preview logic is now handled smoothly by requestAnimationFrame
+      // we only reset position if not in portrait mode
+      if (clipFormat !== "portrait" && videoRef.current) {
+        videoRef.current.style.objectPosition = "center"
+      }
 
       // Dynamically locate the active subtitle segment based on playback time
       const active = subtitles.find(s => {
@@ -615,15 +726,30 @@ export default function EditorPage() {
                 <div className={`transition-all duration-500 rounded-[28px] bg-slate-900 border border-slate-300/80 flex items-center justify-center relative overflow-hidden shadow-xl group shrink-0 ${
                   clipFormat === "portrait" ? "w-[280px] h-[498px]" : "aspect-video w-full max-w-4xl"
                 }`}>
+                  {/* Dynamic Preview Loading Indicator */}
+                  {isTrackingLoading && clipFormat === "portrait" && (
+                    <div className="absolute inset-0 z-30 bg-slate-900/40 backdrop-blur-[2px] flex flex-col items-center justify-center text-white">
+                      <RefreshCw className="w-8 h-8 animate-spin mb-3 text-brand" />
+                      <span className="text-xs font-bold tracking-widest uppercase">AI Face Tracking...</span>
+                      <span className="text-[10px] text-slate-300 mt-1">Generating live preview</span>
+                    </div>
+                  )}
+
                   {video?.originalPath ? (
                     <video 
                       ref={videoRef}
                       src={`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080"}/${video.originalPath.replace("./", "").replace("backend/", "")}`}
                       onTimeUpdate={handleTimeUpdate}
                       onLoadedMetadata={handleLoadedMetadata}
-                      className={`w-full h-full rounded-[26px] transition-all duration-500 bg-slate-900 ${
+                      className={`w-full h-full rounded-[26px] bg-slate-900 ${
                         clipFormat === "portrait" ? "object-cover" : "object-contain"
                       }`}
+                      style={{
+                        // Use transition for dimensions/colors, but NOT object-position 
+                        // so our 60fps requestAnimationFrame doesn't stutter!
+                        transition: "width 0.5s, height 0.5s, border-radius 0.5s, background-color 0.5s",
+                        objectPosition: "center"
+                      }}
                       crossOrigin="anonymous"
                     />
                   ) : (
