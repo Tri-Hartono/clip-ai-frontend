@@ -115,7 +115,7 @@ export default function IntroBuilderModal({ isOpen, onClose, onExport, format }:
       if (el.id === resizingId) {
         // Simple uniform resize for images, width resize for text
         const newW = Math.max(20, elementStartPos.current.w + dx)
-        const ratio = el.height / el.width
+        const ratio = elementStartPos.current.h / elementStartPos.current.w
         const newH = el.type === "image" ? newW * ratio : elementStartPos.current.h + dy
         return { ...el, width: newW, height: newH }
       }
@@ -159,13 +159,15 @@ export default function IntroBuilderModal({ isOpen, onClose, onExport, format }:
     // Wait for all images to load before rendering
     let loadedCount = 0
     const imgElements = elements.filter(el => el.type === "image")
+    const loadedImages: { [id: string]: HTMLImageElement } = {}
     
     const drawElements = () => {
       elements.forEach(el => {
         if (el.type === "image") {
-          const img = new window.Image()
-          img.src = el.content
-          ctx.drawImage(img, el.x, el.y, el.width, el.height)
+          const img = loadedImages[el.id]
+          if (img) {
+            ctx.drawImage(img, el.x, el.y, el.width, el.height)
+          }
         } else if (el.type === "text") {
           ctx.font = `bold ${el.fontSize || 28}px Arial Black, sans-serif`
           ctx.fillStyle = el.color || "#ffffff"
@@ -190,6 +192,7 @@ export default function IntroBuilderModal({ isOpen, onClose, onExport, format }:
           const img = new window.Image()
           img.src = el.content
           img.onload = () => {
+            loadedImages[el.id] = img
             currentLoaded++
             if (currentLoaded === imgElements.length) {
               drawElements()
@@ -328,7 +331,7 @@ export default function IntroBuilderModal({ isOpen, onClose, onExport, format }:
                   onPointerDown={(e) => onPointerDown(e, el.id)}
                 >
                   {el.type === "image" ? (
-                    <img src={el.content} alt="element" className="w-full h-full object-contain pointer-events-none" />
+                    <img src={el.content} alt="element" className="w-full h-full pointer-events-none" />
                   ) : (
                     <div 
                       className="w-full h-full flex items-start"

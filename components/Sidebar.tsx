@@ -9,7 +9,8 @@ import {
   CreditCard, 
   LogOut, 
   Scissors,
-  Sparkles
+  Sparkles,
+  Link as LinkIcon
 } from "lucide-react"
 
 export default function Sidebar() {
@@ -19,7 +20,9 @@ export default function Sidebar() {
   const menuItems = [
     { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
     { name: "My Clips", href: "/projects", icon: Video },
+    { name: "Timelapse", href: "/timelapse", icon: Sparkles },
     { name: "Mockups", href: "/mockups", icon: Sparkles },
+    { name: "Integrations", href: "/integrations", icon: LinkIcon },
     { name: "Billing", href: "/billing", icon: CreditCard },
   ]
 

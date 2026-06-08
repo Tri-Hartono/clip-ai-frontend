@@ -5,10 +5,11 @@ import { useEffect, useState, useRef, useCallback } from "react"
 import Sidebar from "@/components/Sidebar"
 import SubtitleEditor, { SubtitleItem } from "@/components/SubtitleEditor"
 import ExportModal from "@/components/ExportModal"
+import PublishModal from "@/components/PublishModal"
 import { ViralClips } from "@/components/ViralClips"
 import VideoTimeline, { VideoClip } from "@/components/VideoTimeline"
 import IntroBuilderModal from "@/components/IntroBuilderModal"
-import { ArrowLeft, Video, Download, RefreshCw, Sparkles, X, Scissors, Play as PlayIcon, Pause as PauseIcon, Smartphone, Monitor, RotateCcw, RotateCw, Settings2 } from "lucide-react"
+import { ArrowLeft, Video, Download, RefreshCw, Sparkles, X, Scissors, Play as PlayIcon, Pause as PauseIcon, Smartphone, Monitor, RotateCcw, RotateCw, Settings2, Share2 } from "lucide-react"
 import { api } from "@/services/api"
 
 export default function EditorPage() {
@@ -26,6 +27,7 @@ export default function EditorPage() {
   // Intro Builder States
   const [introModalTarget, setIntroModalTarget] = useState<"merge" | "clip" | null>(null)
   const [pendingClipParams, setPendingClipParams] = useState<{ start: string, end: string, format: "landscape"|"portrait", color: string } | null>(null)
+  const [publishOpen, setPublishOpen] = useState(false)
 
   // Watermark States
   const [wmImage, setWmImage] = useState<string | null>(null)
@@ -230,23 +232,42 @@ export default function EditorPage() {
 
     for (const clip of sortedClips) {
       for (const sub of currentSubtitles) {
-        const subStart = parseTimeStrToSeconds(sub.startTime)
-        const subEnd = parseTimeStrToSeconds(sub.endTime)
+        if (singleWordMode && sub.words && sub.words.length > 0) {
+          // Output each word as a separate SRT block
+          for (const word of sub.words) {
+            const wordStart = word.start
+            let wordEnd = word.end
+            // Ensure tiny duration gap for FFmpeg consistency
+            if (wordStart >= wordEnd) wordEnd = wordStart + 0.1
 
-        // Check if subtitle overlaps with this clip
-        if (subEnd > clip.startTime && subStart < clip.endTime) {
-          // Calculate intersection
-          const effectiveStart = Math.max(subStart, clip.startTime)
-          const effectiveEnd = Math.min(subEnd, clip.endTime)
+            if (wordEnd > clip.startTime && wordStart < clip.endTime) {
+              const effectiveStart = Math.max(wordStart, clip.startTime)
+              const effectiveEnd = Math.min(wordEnd, clip.endTime)
+              const mappedStart = (effectiveStart - clip.startTime) + currentTimeOffset
+              const mappedEnd = (effectiveEnd - clip.startTime) + currentTimeOffset
 
-          // Map to new timeline
-          const mappedStart = (effectiveStart - clip.startTime) + currentTimeOffset
-          const mappedEnd = (effectiveEnd - clip.startTime) + currentTimeOffset
+              srtLines.push(`${subCounter}`)
+              srtLines.push(`${formatTimeStrWithMs(mappedStart)} --> ${formatTimeStrWithMs(mappedEnd)}`)
+              srtLines.push(`${word.word}\n`)
+              subCounter++
+            }
+          }
+        } else {
+          // Output full sentence
+          const subStart = parseTimeStrToSeconds(sub.startTime)
+          const subEnd = parseTimeStrToSeconds(sub.endTime)
 
-          srtLines.push(`${subCounter}`)
-          srtLines.push(`${formatTimeStrWithMs(mappedStart)} --> ${formatTimeStrWithMs(mappedEnd)}`)
-          srtLines.push(`${sub.text}\n`)
-          subCounter++
+          if (subEnd > clip.startTime && subStart < clip.endTime) {
+            const effectiveStart = Math.max(subStart, clip.startTime)
+            const effectiveEnd = Math.min(subEnd, clip.endTime)
+            const mappedStart = (effectiveStart - clip.startTime) + currentTimeOffset
+            const mappedEnd = (effectiveEnd - clip.startTime) + currentTimeOffset
+
+            srtLines.push(`${subCounter}`)
+            srtLines.push(`${formatTimeStrWithMs(mappedStart)} --> ${formatTimeStrWithMs(mappedEnd)}`)
+            srtLines.push(`${sub.text}\n`)
+            subCounter++
+          }
         }
       }
       currentTimeOffset += (clip.endTime - clip.startTime)
@@ -399,7 +420,8 @@ export default function EditorPage() {
           scale: wmScale,
           position: wmPosition
         } : null,
-        customSrt
+        customSrt,
+        introOverlay: introOverlayBase64
       })
       if (response.data && response.data.clipUrl) {
         const fullClipUrl = `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080"}${response.data.clipUrl}`
@@ -846,6 +868,15 @@ export default function EditorPage() {
                 <Download className="w-4 h-4" />
                 <span>Download YouTube Short</span>
               </a>
+
+              {/* Publish Option CTA */}
+              <button
+                onClick={() => setPublishOpen(true)}
+                className="w-full mt-3 py-4 bg-slate-900 hover:bg-slate-850 text-white rounded-xl font-bold flex items-center justify-center gap-2 transition-all shadow-lg text-xs active:scale-98 border border-slate-800 hover:border-slate-700 cursor-pointer"
+              >
+                <Share2 className="w-4 h-4 text-brand-accent" />
+                <span>Publish to Social Media</span>
+              </button>
             </div>
           </div>
         )}
@@ -854,6 +885,13 @@ export default function EditorPage() {
           isOpen={exportOpen} 
           onClose={() => setExportOpen(false)} 
           srtContent={srtContent}
+        />
+
+        <PublishModal
+          isOpen={publishOpen}
+          onClose={() => setPublishOpen(false)}
+          videoUrl={activeClipUrl || ""}
+          defaultTitle={video?.title || "My Generated Short"}
         />
 
         {/* Customizer Modal & Overlays */}

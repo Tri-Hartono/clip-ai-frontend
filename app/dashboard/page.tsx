@@ -5,9 +5,10 @@ import { useState, useEffect } from "react"
 import Sidebar from "@/components/Sidebar"
 import UploadZone from "@/components/UploadZone"
 import { useAuth } from "@/providers/AuthProvider"
-import { Sparkles, Video, Clock, Layout, RefreshCw } from "lucide-react"
 import { useProjectStore } from "@/store/projectStore"
+import { Sparkles, Video, Clock, Layout, RefreshCw } from "lucide-react"
 import { api } from "@/services/api"
+import Link from "next/link"
 
 export default function DashboardPage() {
   const { user, loading } = useAuth()
@@ -72,7 +73,17 @@ export default function DashboardPage() {
         </div>
 
         {/* Upload Interaction Zone */}
-        <div className="mb-10">
+        <div className="mb-10 flex flex-col gap-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-bold text-slate-700">Mulai Proyek Baru</h3>
+            <Link 
+              href="/timelapse"
+              className="px-4 py-2 bg-gradient-to-r from-emerald-500 to-teal-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-emerald-500/20 flex items-center gap-2 hover:shadow-xl hover:scale-105 transition-all active:scale-95"
+            >
+              <Sparkles className="w-4 h-4" />
+              <span>Buat AI Timelapse</span>
+            </Link>
+          </div>
           <UploadZone onSuccess={handleUploadSuccess} />
         </div>
 
