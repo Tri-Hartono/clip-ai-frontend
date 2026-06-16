@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { useState } from "react"
-import { Video, Clock, ArrowRight, CheckCircle2, RefreshCw, XCircle, Trash2, AlertTriangle, X } from "lucide-react"
+import { Video, Clock, ArrowRight, CheckCircle2, RefreshCw, XCircle, Trash2, AlertTriangle, X, Sparkles } from "lucide-react"
 import { VideoProject, useProjectStore } from "@/store/projectStore"
 import { api } from "@/services/api"
 
@@ -14,6 +14,32 @@ export default function VideoCard({ project }: VideoCardProps) {
   const { deleteProject } = useProjectStore()
   const [deleteModalOpen, setDeleteModalOpen] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
+  const [clipsOpen, setClipsOpen] = useState(false)
+  const [aiClips, setAiClips] = useState<any[]>([])
+  const [loadingClips, setLoadingClips] = useState(false)
+
+  const fetchClips = async () => {
+    if (aiClips.length > 0) return
+    setLoadingClips(true)
+    try {
+      const resp = await api.get(`/api/videos/${project.id}/clips`)
+      setAiClips(resp.data || [])
+    } catch (err) {
+      console.error("Failed to fetch AI clips:", err)
+    } finally {
+      setLoadingClips(false)
+    }
+  }
+
+  const handleToggleClips = (e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    const nextVal = !clipsOpen
+    setClipsOpen(nextVal)
+    if (nextVal) {
+      fetchClips()
+    }
+  }
 
   const getStatusStyle = (status: string) => {
     switch (status) {
@@ -152,7 +178,7 @@ export default function VideoCard({ project }: VideoCardProps) {
       {/* Primary Action Buttons */}
       <div className="flex items-center gap-2 mt-2.5">
         <Link
-          href={project.status === "completed" ? `/editor/${project.id}` : "#"}
+          href={project.status === "completed" ? `/editor/${project.uuid || project.id}` : "#"}
           className={`flex-1 py-2.5 rounded-xl font-bold flex items-center justify-center gap-2 transition-all duration-300 text-xs active:scale-95 ${
             project.status === "completed"
               ? "bg-slate-50 hover:bg-brand text-slate-800 hover:text-white border border-slate-200/60 hover:border-transparent hover:shadow-md hover:shadow-brand/10"
@@ -170,6 +196,75 @@ export default function VideoCard({ project }: VideoCardProps) {
           <Trash2 className="w-4 h-4" />
         </button>
       </div>
+
+      {project.status === "completed" && (
+        <div className="mt-4 border-t border-slate-100 pt-3 flex flex-col w-full text-slate-800">
+          <button
+            onClick={handleToggleClips}
+            className="w-full flex items-center justify-between text-xs font-bold text-slate-650 hover:text-brand transition-colors py-1 cursor-pointer"
+          >
+            <span className="flex items-center gap-1.5">
+              <Sparkles className="w-3.5 h-3.5 text-brand animate-pulse" />
+              Lihat Klip Viral AI ({loadingClips ? "..." : aiClips.length})
+            </span>
+            <span className="transition-transform duration-300" style={{ transform: clipsOpen ? "rotate(180deg)" : "rotate(0)" }}>
+              ▼
+            </span>
+          </button>
+
+          {clipsOpen && (
+            <div className="mt-2.5 space-y-2 max-h-[250px] overflow-y-auto pr-1">
+              {loadingClips ? (
+                <div className="flex items-center justify-center py-4 text-xs font-bold text-slate-400 gap-1.5">
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin text-brand" />
+                  Memuat klip AI...
+                </div>
+              ) : aiClips.length === 0 ? (
+                <div className="text-[10px] text-slate-400 font-semibold py-2 text-center">
+                  AI sedang memproses klip atau tidak menemukan potongan viral.
+                </div>
+              ) : (
+                aiClips.map((clip) => {
+                  const minutes = Math.floor(clip.duration / 60)
+                  const seconds = clip.duration % 60
+                  const durationStr = `${minutes}:${seconds < 10 ? "0" : ""}${seconds}`
+
+                  return (
+                    <div key={clip.id} className="p-3 bg-slate-50 border border-slate-100 rounded-2xl flex flex-col gap-1.5">
+                      <div className="flex justify-between items-start">
+                        <div className="flex flex-col">
+                          <span className="text-xs font-extrabold text-slate-800 line-clamp-1">{clip.title || "Klip AI"}</span>
+                          <span className="text-[10px] text-slate-400 font-semibold mt-0.5">Durasi: {durationStr} | Skor Viral: {clip.score}%</span>
+                        </div>
+                      </div>
+                      <p className="text-[10px] text-slate-500 font-medium leading-relaxed italic line-clamp-2">
+                        "{clip.rationale}"
+                      </p>
+                      <div className="flex gap-2 mt-1">
+                        <a
+                          href={`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080"}${clip.path}`}
+                          download
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex-1 py-1.5 bg-brand text-white text-[10px] font-black rounded-lg text-center flex items-center justify-center gap-1 hover:shadow-md hover:bg-brand-dark active:scale-95 transition-all"
+                        >
+                          Download MP4
+                        </a>
+                        <Link
+                          href={`/editor/${project.uuid || project.id}?start=${clip.startTime}&end=${clip.endTime}`}
+                          className="flex-1 py-1.5 bg-white border border-slate-200 text-slate-700 text-[10px] font-black rounded-lg text-center flex items-center justify-center gap-1 hover:bg-slate-50 hover:border-slate-350 active:scale-95 transition-all"
+                        >
+                          Edit di Studio
+                        </Link>
+                      </div>
+                    </div>
+                  )
+                })
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Premium Custom Deletion Modal */}
       {deleteModalOpen && (

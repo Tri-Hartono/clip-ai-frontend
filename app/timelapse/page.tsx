@@ -48,6 +48,7 @@ export default function TimelapsePage() {
       if (resp.data.video) {
         const newProj = {
           id: resp.data.video.id,
+          uuid: resp.data.video.uuid,
           title: resp.data.video.title,
           status: resp.data.video.status,
           originalPath: resp.data.video.originalPath,
@@ -57,7 +58,7 @@ export default function TimelapsePage() {
           thumbnailUrl: resp.data.video.thumbnailUrl || ""
         }
         addProject(newProj)
-        router.push(`/editor/${newProj.id}`)
+        router.push(`/editor/${newProj.uuid || newProj.id}`)
       }
     } catch (err: any) {
       console.error("Timelapse generation failed", err)

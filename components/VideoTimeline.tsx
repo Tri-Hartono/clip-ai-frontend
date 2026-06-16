@@ -55,6 +55,7 @@ export default function VideoTimeline({
   const [zoom, setZoom] = useState(1)
   const [trimming, setTrimming] = useState<{ clipId: string; side: "left" | "right" } | null>(null)
   const [enteringClipId, setEnteringClipId] = useState<string | null>(null)
+  const [isScrubbing, setIsScrubbing] = useState(false)
 
   // Compute total duration of all clips
   const totalClipsDuration = clips.reduce((sum, c) => sum + (c.endTime - c.startTime), 0)
@@ -154,9 +155,14 @@ export default function VideoTimeline({
     if (selectedClipId === clipId) onSelectClip(null)
   }
 
-  // --- Track click to seek ---
-  const handleTrackClick = (e: React.MouseEvent) => {
+  // --- Track drag/click to seek (Scrubbing) ---
+  const handleTrackMouseDown = (e: React.MouseEvent) => {
     if (trimming) return
+    if ((e.target as HTMLElement).closest(".clip-trim-handle")) return
+    if ((e.target as HTMLElement).closest("button")) return
+
+    setIsScrubbing(true)
+
     if (!trackRef.current) return
     const rect = trackRef.current.getBoundingClientRect()
     const scrollLeft = trackRef.current.scrollLeft
@@ -164,6 +170,30 @@ export default function VideoTimeline({
     const timeAtX = Math.max(0, Math.min((x / trackWidth) * duration, duration))
     onSeekTo(timeAtX)
   }
+
+  useEffect(() => {
+    if (!isScrubbing) return
+
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!trackRef.current) return
+      const rect = trackRef.current.getBoundingClientRect()
+      const scrollLeft = trackRef.current.scrollLeft
+      const x = e.clientX - rect.left + scrollLeft
+      const timeAtX = Math.max(0, Math.min((x / trackWidth) * duration, duration))
+      onSeekTo(timeAtX)
+    }
+
+    const handleMouseUp = () => {
+      setIsScrubbing(false)
+    }
+
+    window.addEventListener("mousemove", handleMouseMove)
+    window.addEventListener("mouseup", handleMouseUp)
+    return () => {
+      window.removeEventListener("mousemove", handleMouseMove)
+      window.removeEventListener("mouseup", handleMouseUp)
+    }
+  }, [isScrubbing, duration, trackWidth, onSeekTo])
 
   // Sorted clips for display
   const sortedClips = [...clips].sort((a, b) => a.order - b.order)
@@ -282,7 +312,7 @@ export default function VideoTimeline({
       <div
         ref={trackRef}
         className="timeline-track cursor-crosshair"
-        onClick={handleTrackClick}
+        onMouseDown={handleTrackMouseDown}
         style={{ width: "100%", position: "relative" }}
       >
         {/* Inner scrollable content */}

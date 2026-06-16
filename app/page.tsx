@@ -24,17 +24,89 @@ import {
   Users, 
   Cpu,
   Layers,
-  Heart
+  Heart,
+  ChevronDown,
+  Mail,
+  Phone,
+  MapPin,
+  Send
 } from "lucide-react"
 import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
+import LoginModal from "@/components/LoginModal"
 
 export default function LandingPage() {
   const { user } = useAuth()
+  const router = useRouter()
   const [activeTab, setActiveTab] = useState("podcast")
   const [typedText, setTypedText] = useState("")
   const [selectedLanguage, setSelectedLanguage] = useState("id")
   const [captionStyle, setCaptionStyle] = useState("yellow-dark")
   const [videoAspect, setVideoAspect] = useState("916") // '916' or '169'
+
+  const [isLoginModalOpen, setIsLoginModalOpen] = useState(false)
+  const [modalMode, setModalMode] = useState<"login" | "register">("register")
+
+  const [faqsState, setFaqsState] = useState<any[]>([])
+  const [activeFaqIndex, setActiveFaqIndex] = useState<number | null>(null)
+  const [contactState, setContactState] = useState<any>({
+    contactEmail: "support@gayadigital.com",
+    contactPhone: "+62 812-3456-7890",
+    contactLocation: "Gaya Digital Tower, Lantai 12, Jakarta, Indonesia"
+  })
+
+  useEffect(() => {
+    // Fetch FAQs
+    fetch("http://localhost:8080/api/faqs")
+      .then(res => res.json())
+      .then(data => {
+        if (Array.isArray(data)) setFaqsState(data)
+      })
+      .catch(err => console.error("Failed to load FAQs", err))
+
+    // Fetch Contact Info
+    fetch("http://localhost:8080/api/contact-settings")
+      .then(res => res.json())
+      .then(data => {
+        if (data) setContactState(data)
+      })
+      .catch(err => console.error("Failed to load contact info", err))
+  }, [])
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search)
+      if (params.get("login") === "true") {
+        setModalMode("login")
+        setIsLoginModalOpen(true)
+      } else if (params.get("register") === "true") {
+        setModalMode("register")
+        setIsLoginModalOpen(true)
+      }
+    }
+  }, [])
+
+  // Dynamic Landing Content States
+  const [heroTitle, setHeroTitle] = useState("Ubah Video Panjang Jadi Klip Shorts Viral")
+  const [heroSubtitle, setHeroSubtitle] = useState("Gunakan kekuatan kecerdasan buatan untuk mengekstrak bagian paling menarik dari video YouTube, podcast, atau file mp4 Anda. Tambahkan subtitle keren, reframe otomatis ke 9:16, dan unduh secara instan!")
+  const [ctaText, setCtaText] = useState("Mulai Potong Gratis")
+  const [featuresState, setFeaturesState] = useState<any[]>([])
+  const [testimonialsState, setTestimonialsState] = useState<any[]>([])
+
+  useEffect(() => {
+    fetch("http://localhost:8080/api/landing-content")
+      .then(res => res.json())
+      .then(data => {
+        if (data.heroTitle) setHeroTitle(data.heroTitle)
+        if (data.heroSubtitle) setHeroSubtitle(data.heroSubtitle)
+        if (data.ctaText) setCtaText(data.ctaText)
+        if (data.features && data.features.length > 0) setFeaturesState(data.features)
+        if (data.testimonials && data.testimonials.length > 0) setTestimonialsState(data.testimonials)
+      })
+      .catch(err => {
+        console.error("Failed to load landing page dynamic config", err)
+      })
+  }, [])
 
   // Typing animation effect for the link input box mock
   useEffect(() => {
@@ -71,46 +143,47 @@ export default function LandingPage() {
     }
   }
 
-  const features = [
+  const iconMap = [Cpu, Smartphone, Sparkles, Languages, Sliders, TrendingUp]
+
+  const defaultFeatures = [
     {
-      icon: Cpu,
       title: "AI Smart Scene Detection",
       description: "AI kami secara cerdas menganalisis seluruh durasi video untuk menemukan momen paling klimaks, lucu, atau inspiratif secara otomatis.",
       badge: "Teknologi Core"
     },
     {
-      icon: Smartphone,
       title: "Auto Portrait Reframing (9:16)",
       description: "Secara otomatis memotong video landscape menjadi potrait dengan pelacakan wajah (smart face focusing) agar pembicara selalu di tengah frame.",
       badge: "Center Crop"
     },
     {
-      icon: Sparkles,
       title: "Karaoke-Style Subtitles",
       description: "Hasilkan subtitle otomatis berbasis Whisper AI berakurasi tinggi dengan gaya running text menyala mengikuti suku kata yang diucapkan.",
       badge: "Akurasi 99%"
     },
     {
-      icon: Languages,
       title: "Multi-Language Transcribe",
       description: "Dukungan penuh untuk transkrip otomatis bahasa Indonesia, Inggris, gaul/slang, dan puluhan bahasa lainnya tanpa hambatan.",
       badge: "Global Ready"
     },
     {
-      icon: Sliders,
       title: "Instant Fast-Cut Engine",
       description: "Didukung backend FFmpeg berkinerja tinggi. Potong video berukuran GB langsung di cloud dalam milidetik tanpa render ulang yang lama.",
       badge: "Kecepatan Cahaya"
     },
     {
-      icon: TrendingUp,
       title: "Algorithmic Retention Booster",
       description: "Desain layout, kombinasi warna, font tebal, dan template subtitle yang dioptimalkan khusus untuk memicu algoritma fyp TikTok & Reels.",
       badge: "Fyp Magnet"
     }
   ]
 
-  const testimonials = [
+  const features = (featuresState.length > 0 ? featuresState : defaultFeatures).map((f, idx) => ({
+    ...f,
+    icon: iconMap[idx % iconMap.length]
+  }))
+
+  const defaultTestimonials = [
     {
       name: "Andi Wijaya",
       role: "Digital Marketer & Shopify Seller",
@@ -130,6 +203,11 @@ export default function LandingPage() {
       text: "Tim editor kami bisa memproduksi ratusan konten Shorts per hari semenjak beralih menggunakan Clippers. Efisiensi kerja naik luar biasa tinggi!"
     }
   ]
+
+  const testimonials = testimonialsState.length > 0 ? testimonialsState.map((t, idx) => ({
+    ...t,
+    image: t.image || `https://avatar.iran.liara.run/public/${idx % 2 === 0 ? "boy" : "girl"}?id=${idx}`
+  })) : defaultTestimonials
 
   return (
     <div className="min-h-screen bg-slate-50 text-[#0d3b35] flex flex-col font-sans relative overflow-hidden">
@@ -154,22 +232,54 @@ export default function LandingPage() {
           </div>
         </div>
 
+        <nav className="hidden md:flex items-center gap-7 text-xs font-bold text-slate-600">
+          <Link href="/" className="hover:text-brand transition-colors">Beranda</Link>
+          <Link href="/blog" className="hover:text-brand transition-colors">Blog</Link>
+          <Link href="/billing" className="hover:text-brand transition-colors">Harga</Link>
+          <a href="#faq" className="hover:text-brand transition-colors">FAQ</a>
+          <Link href="/contact" className="hover:text-brand transition-colors">Contact</Link>
+        </nav>
+
         <div className="flex items-center gap-4">
-          {user && (
-            <Link 
-              href="/dashboard"
-              className="text-xs font-bold text-slate-500 hover:text-brand transition-colors mr-2 hidden sm:block"
-            >
-              Dashboard
-            </Link>
+          {user ? (
+            <>
+              <Link 
+                href="/dashboard"
+                className="text-xs font-bold text-slate-500 hover:text-brand transition-colors mr-2 hidden sm:block"
+              >
+                Dashboard
+              </Link>
+              <Link
+                href="/dashboard"
+                className="px-5 py-2.5 rounded-2xl bg-brand hover:bg-brand-dark text-white text-xs font-extrabold transition-all shadow-lg shadow-brand/20 flex items-center gap-2 active:scale-95 shimmer-btn"
+              >
+                <span>Masuk Dashboard</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </Link>
+            </>
+          ) : (
+            <>
+              <button
+                onClick={() => {
+                  setModalMode("login")
+                  setIsLoginModalOpen(true)
+                }}
+                className="text-xs font-bold text-slate-750 hover:text-brand transition-colors cursor-pointer mr-2"
+              >
+                Masuk
+              </button>
+              <button
+                onClick={() => {
+                  setModalMode("register")
+                  setIsLoginModalOpen(true)
+                }}
+                className="px-5 py-2.5 rounded-2xl bg-brand hover:bg-brand-dark text-white text-xs font-extrabold transition-all shadow-lg shadow-brand/20 flex items-center gap-2 active:scale-95 shimmer-btn cursor-pointer"
+              >
+                <span>Daftar</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            </>
           )}
-          <Link
-            href={user ? "/dashboard" : "/login"}
-            className="px-5 py-2.5 rounded-2xl bg-brand hover:bg-brand-dark text-white text-xs font-extrabold transition-all shadow-lg shadow-brand/20 flex items-center gap-2 active:scale-95 shimmer-btn"
-          >
-            <span>{user ? "Masuk Dashboard" : "Coba Gratis Sekarang"}</span>
-            <ArrowRight className="w-3.5 h-3.5" />
-          </Link>
         </div>
       </header>
 
@@ -183,15 +293,12 @@ export default function LandingPage() {
             <span>AI-POWERED VIDEO CLIP GENERATOR</span>
           </div>
 
-          <h1 className="text-4xl md:text-6xl font-extrabold text-slate-900 tracking-tight leading-[1.1]">
-            Ubah Video Panjang <br />
-            <span className="gradient-text-animated">
-              Jadi Klip Shorts Viral
-            </span>
+          <h1 className="text-4xl md:text-6xl font-extrabold text-slate-900 tracking-tight leading-[1.1] whitespace-pre-line">
+            {heroTitle}
           </h1>
 
           <p className="text-base text-slate-500 max-w-xl leading-relaxed font-semibold">
-            Gunakan kekuatan kecerdasan buatan untuk mengekstrak bagian paling menarik dari video YouTube, podcast, atau file mp4 Anda. Tambahkan subtitle keren, reframe otomatis ke 9:16, dan unduh secara instan!
+            {heroSubtitle}
           </p>
 
           {/* Bullet Points */}
@@ -227,13 +334,20 @@ export default function LandingPage() {
               />
               <span className="w-1 h-4 bg-brand animate-pulse"></span>
             </div>
-            <Link
-              href={user ? "/dashboard" : "/login"}
-              className="w-full sm:w-auto px-6 py-3.5 bg-brand hover:bg-brand-dark text-white rounded-2xl text-xs font-extrabold flex items-center justify-center gap-2.5 transition-all shadow-lg shadow-brand/20 whitespace-nowrap active:scale-95"
+            <button
+              onClick={() => {
+                if (user) {
+                  router.push("/dashboard")
+                } else {
+                  setModalMode("register")
+                  setIsLoginModalOpen(true)
+                }
+              }}
+              className="w-full sm:w-auto px-6 py-3.5 bg-brand hover:bg-brand-dark text-white rounded-2xl text-xs font-extrabold flex items-center justify-center gap-2.5 transition-all shadow-lg shadow-brand/20 whitespace-nowrap active:scale-95 cursor-pointer"
             >
-              <span>Mulai Potong Gratis</span>
+              <span>{ctaText}</span>
               <ArrowRight className="w-4 h-4" />
-            </Link>
+            </button>
           </div>
 
           <div className="flex items-center gap-4 text-xs font-bold text-slate-400">
@@ -420,13 +534,20 @@ export default function LandingPage() {
 
                 {/* Action CTA mock */}
                 <div className="pt-2 border-t border-slate-100">
-                  <Link
-                    href={user ? "/dashboard" : "/login"}
-                    className="w-full py-3.5 bg-brand hover:bg-brand-dark text-white rounded-2xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 shadow-lg shadow-brand/20 active:scale-95 transition-all shimmer-btn"
+                  <button
+                    onClick={() => {
+                      if (user) {
+                        router.push("/dashboard")
+                      } else {
+                        setModalMode("register")
+                        setIsLoginModalOpen(true)
+                      }
+                    }}
+                    className="w-full py-3.5 bg-brand hover:bg-brand-dark text-white rounded-2xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 shadow-lg shadow-brand/20 active:scale-95 transition-all shimmer-btn cursor-pointer"
                   >
                     <Download className="w-3.5 h-3.5" />
                     <span>Download Klip Full HD</span>
-                  </Link>
+                  </button>
                   <p className="text-[8px] text-center text-slate-400 font-bold mt-2 uppercase tracking-wide">Instant render, No watermark trial</p>
                 </div>
 
@@ -441,7 +562,7 @@ export default function LandingPage() {
       </section>
 
       {/* HORIZONTAL SHOWCASE: AI GENERATED SHORTS PREVIEW CAROUSEL */}
-      <section className="py-20 bg-brand-light/20 relative z-10 overflow-hidden">
+      <section className="py-20 bg-slate-50 relative z-10 overflow-hidden">
         <div className="max-w-7xl mx-auto px-6 mb-8 flex items-end justify-between">
           <div className="text-left space-y-2">
             <span className="text-brand text-xs font-black uppercase tracking-widest bg-brand/10 px-3.5 py-1.5 rounded-full">Output Galeri</span>
@@ -783,7 +904,7 @@ export default function LandingPage() {
             </p>
 
             {/* Tabs Selector */}
-            <div className="flex justify-center gap-2.5 mt-8 border border-brand-soft bg-white/80 p-2 rounded-2xl max-w-md mx-auto shadow-sm">
+            <div className="flex justify-center gap-2.5 mt-8 border border-slate-200 bg-white/80 p-2 rounded-2xl max-w-md mx-auto shadow-sm">
               <button
                 onClick={() => setActiveTab("podcast")}
                 className={`flex-1 py-2.5 text-[11px] font-black uppercase rounded-xl transition-all ${
@@ -842,13 +963,20 @@ export default function LandingPage() {
               </div>
 
               <div className="pt-4">
-                <Link
-                  href={user ? "/dashboard" : "/login"}
-                  className="inline-flex items-center gap-2 px-5 py-3.5 bg-brand hover:bg-brand-dark text-white rounded-2xl text-xs font-extrabold shadow transition-all active:scale-95"
+                <button
+                  onClick={() => {
+                    if (user) {
+                      router.push("/dashboard")
+                    } else {
+                      setModalMode("register")
+                      setIsLoginModalOpen(true)
+                    }
+                  }}
+                  className="inline-flex items-center gap-2 px-5 py-3.5 bg-brand hover:bg-brand-dark text-white rounded-2xl text-xs font-extrabold shadow transition-all active:scale-95 cursor-pointer"
                 >
                   <span>Coba Template Sekarang</span>
                   <ArrowRight className="w-3.5 h-3.5" />
-                </Link>
+                </button>
               </div>
             </div>
 
@@ -861,7 +989,7 @@ export default function LandingPage() {
                   className="w-full h-full object-cover"
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-slate-900/60 via-transparent to-transparent"></div>
-                <div className="absolute bottom-6 left-6 right-6 p-4 bg-white/95 backdrop-blur rounded-2xl border border-brand-soft/40 shadow flex items-center justify-between">
+                <div className="absolute bottom-6 left-6 right-6 p-4 bg-white/95 backdrop-blur rounded-2xl border border-slate-250 shadow flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <div className="w-8 h-8 rounded-full bg-brand flex items-center justify-center text-white">
                       <Play className="w-3.5 h-3.5 fill-current" />
@@ -884,7 +1012,7 @@ export default function LandingPage() {
       </section>
 
       {/* CORE VALUE FEATURES GRID */}
-      <section className="py-24 bg-brand-light/30 relative z-10">
+      <section className="py-24 bg-slate-50 relative z-10">
         <div className="max-w-7xl mx-auto px-6">
           <div className="text-center max-w-3xl mx-auto mb-20 space-y-4">
             <span className="text-brand text-xs font-extrabold uppercase tracking-widest bg-brand/10 px-3.5 py-1.5 rounded-full">Fitur Premium</span>
@@ -969,7 +1097,7 @@ export default function LandingPage() {
         
         {/* Floating background shape details */}
         <div className="absolute -top-10 -left-10 w-44 h-44 rounded-full bg-brand-accent/20 blur-xl"></div>
-        <div className="absolute -bottom-10 -right-10 w-44 h-44 rounded-full bg-brand-soft/20 blur-xl"></div>
+        <div className="absolute -bottom-10 -right-10 w-44 h-44 rounded-full bg-brand-accent/10 blur-xl"></div>
 
         <div className="max-w-4xl mx-auto px-6 relative space-y-8">
           <div className="w-14 h-14 rounded-3xl bg-white/10 flex items-center justify-center text-white mx-auto border border-white/20 shadow animate-float-medium">
@@ -979,21 +1107,28 @@ export default function LandingPage() {
           <h2 className="text-3xl md:text-5xl font-black tracking-tight leading-none">
             Siap Melipatgandakan <br className="hidden sm:block"/> Viewers Video Shorts Anda?
           </h2>
-          <p className="text-brand-light/80 max-w-xl mx-auto text-xs md:text-sm font-bold">
+          <p className="text-white/80 max-w-xl mx-auto text-xs md:text-sm font-bold">
             Bergabunglah dengan ratusan kreator sukses lainnya yang sudah menghemat ratusan jam waktu pengeditan video. Coba secara gratis hari ini.
           </p>
 
           <div className="pt-2">
-            <Link
-              href={user ? "/dashboard" : "/login"}
-              className="inline-flex items-center gap-2.5 bg-white text-brand hover:bg-slate-50 px-8 py-4 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-brand-dark/30 transition-all duration-300 active:scale-95 hover:shadow-white/10"
+            <button
+              onClick={() => {
+                if (user) {
+                  router.push("/dashboard")
+                } else {
+                  setModalMode("register")
+                  setIsLoginModalOpen(true)
+                }
+              }}
+              className="inline-flex items-center gap-2.5 bg-white text-brand hover:bg-slate-50 px-8 py-4 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-brand-dark/30 transition-all duration-300 active:scale-95 hover:shadow-white/10 cursor-pointer"
             >
               <span>Buat Video Shorts Pertama Anda</span>
               <ArrowUpRight className="w-4.5 h-4.5 text-brand" />
-            </Link>
+            </button>
           </div>
 
-          <div className="flex items-center justify-center gap-6 text-[10px] font-black tracking-widest text-brand-light/60 uppercase">
+          <div className="flex items-center justify-center gap-6 text-[10px] font-black tracking-widest text-white/60 uppercase">
             <span>✓ No credit card required</span>
             <span>✓ Loss-less FFmpeg cutting</span>
             <span>✓ 99% whisper accuracy</span>
@@ -1001,26 +1136,129 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* FOOTER */}
-      <footer className="py-12 bg-white text-slate-500 text-xs font-semibold relative z-10 shadow-xl">
-        <div className="max-w-7xl mx-auto px-6 flex flex-col md:flex-row items-center justify-between gap-6">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-xl bg-brand flex items-center justify-center text-white shadow shadow-brand/20">
-              <Scissors className="w-4 h-4" />
-            </div>
-            <div>
-              <span className="font-extrabold text-slate-900 text-sm">CLIPPERS AI</span>
-              <p className="text-[8px] text-brand uppercase font-bold tracking-wider">Video Clip Generator</p>
-            </div>
+      {/* FAQs SECTION */}
+      <section className="py-24 bg-white relative z-10 border-t border-slate-100" id="faq">
+        <div className="max-w-4xl mx-auto px-6">
+          <div className="text-center max-w-3xl mx-auto mb-16 space-y-4">
+            <span className="text-brand text-xs font-extrabold uppercase tracking-widest bg-brand/10 px-3.5 py-1.5 rounded-full">FAQ</span>
+            <h2 className="text-3xl font-extrabold text-slate-900 sm:text-5xl tracking-tight">
+              Pertanyaan Umum
+            </h2>
+            <p className="text-slate-500 font-semibold max-w-xl mx-auto text-sm">
+              Temukan jawaban cepat tentang fitur, kredit kuota, dan penggunaan layanan Clippers AI.
+            </p>
           </div>
-          <p className="text-[11px] text-slate-400 font-bold">© 2026 Clippers AI. Powered by high-performance FFmpeg & Whisper AI. All rights reserved.</p>
-          <div className="flex gap-4.5 text-[11px] font-bold text-slate-400">
-            <a href="#" className="hover:text-brand transition-colors">Privacy Policy</a>
-            <a href="#" className="hover:text-brand transition-colors">Terms of Service</a>
-            <a href="#" className="hover:text-brand transition-colors flex items-center gap-1"><Heart className="w-3.5 h-3.5 text-rose-500 fill-current" /> Hubungi Dukungan</a>
+
+          <div className="space-y-4">
+            {faqsState.map((faq, idx) => {
+              const isOpen = activeFaqIndex === idx
+              return (
+                <div 
+                  key={faq.id || idx}
+                  className="bg-slate-50 border border-slate-200/80 rounded-2xl overflow-hidden transition-all duration-350"
+                >
+                  <button
+                    onClick={() => setActiveFaqIndex(isOpen ? null : idx)}
+                    className="w-full p-5 text-left flex items-center justify-between gap-4 font-bold text-slate-900 transition-colors hover:text-brand cursor-pointer"
+                  >
+                    <span className="text-sm md:text-base font-extrabold">{faq.question}</span>
+                    <span className={`w-6 h-6 rounded-lg bg-white border border-slate-200 flex items-center justify-center text-slate-550 transition-transform duration-350 shrink-0 ${isOpen ? "rotate-180 text-brand border-brand/20 bg-brand/5" : ""}`}>
+                      <ChevronDown className="w-3.5 h-3.5" />
+                    </span>
+                  </button>
+                  <div 
+                    className={`transition-all duration-350 ease-in-out ${
+                      isOpen ? "max-h-60 border-t border-slate-200/40 p-5 bg-white text-slate-600 text-xs md:text-sm font-semibold leading-relaxed" : "max-h-0 overflow-hidden"
+                    }`}
+                  >
+                    {faq.answer}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      </section>
+
+      {/* PREMIUM FOOTER */}
+      <footer className="py-20 bg-white relative z-10 border-t border-slate-200/80 text-slate-500 text-xs font-semibold">
+        <div className="max-w-7xl mx-auto px-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-10 md:gap-12 mb-16">
+            
+            {/* Column 1: Brand details */}
+            <div className="lg:col-span-4 space-y-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-brand flex items-center justify-center text-white shadow-lg shadow-brand/25">
+                  <Scissors className="w-5 h-5" />
+                </div>
+                <div>
+                  <span className="font-extrabold text-slate-900 text-base tracking-wider">CLIPPERS AI</span>
+                  <p className="text-[9px] text-brand uppercase font-bold tracking-wider">Video Clip Generator</p>
+                </div>
+              </div>
+              <p className="text-xs text-slate-405 font-semibold leading-relaxed max-w-sm">
+                Solusi cerdas pengeditan klip video otomatis bertenaga FFmpeg & kecerdasan buatan Whisper AI. Ubah konten panjang Anda menjadi klip Shorts, Reels, dan TikTok viral dalam hitungan menit.
+              </p>
+            </div>
+
+            {/* Column 2: Navigation Links */}
+            <div className="lg:col-span-2 space-y-4">
+              <h4 className="text-xs font-black text-slate-900 uppercase tracking-widest">Navigasi</h4>
+              <ul className="space-y-2.5">
+                <li><Link href="/" className="hover:text-brand transition-colors text-slate-500 font-semibold">Beranda</Link></li>
+                <li><Link href="/blog" className="hover:text-brand transition-colors text-slate-500 font-semibold">Blog Edukasi</Link></li>
+                <li><Link href="/billing" className="hover:text-brand transition-colors text-slate-500 font-semibold">Harga Paket</Link></li>
+                <li><Link href="/contact" className="hover:text-brand transition-colors text-slate-500 font-semibold">Kontak Kami</Link></li>
+                <li><a href="#faq" className="hover:text-brand transition-colors text-slate-500 font-semibold">FAQ</a></li>
+              </ul>
+            </div>
+
+            {/* Column 3: Legal & Support */}
+            <div className="lg:col-span-2 space-y-4">
+              <h4 className="text-xs font-black text-slate-900 uppercase tracking-widest">Kebijakan</h4>
+              <ul className="space-y-2.5">
+                <li><Link href="/terms" className="hover:text-brand transition-colors text-slate-500 font-semibold">Syarat Ketentuan</Link></li>
+                <li><Link href="/privacy" className="hover:text-brand transition-colors text-slate-500 font-semibold">Kebijakan Privasi</Link></li>
+                <li><a href="#" className="hover:text-brand transition-colors text-slate-500 font-semibold flex items-center gap-1"><Heart className="w-3.5 h-3.5 text-rose-500 fill-current" /> Hubungi Dukungan</a></li>
+              </ul>
+            </div>
+
+            {/* Column 4: Contact Summary */}
+            <div className="lg:col-span-4 space-y-4 text-left">
+              <h4 className="text-xs font-black text-slate-900 uppercase tracking-widest">Informasi Kontak</h4>
+              <ul className="space-y-3 text-slate-500 font-semibold">
+                <li className="flex items-start gap-2.5">
+                  <Mail className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
+                  <span className="break-all">{contactState.contactEmail}</span>
+                </li>
+                <li className="flex items-start gap-2.5">
+                  <Phone className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
+                  <span>{contactState.contactPhone}</span>
+                </li>
+                <li className="flex items-start gap-2.5">
+                  <MapPin className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
+                  <span className="leading-normal">{contactState.contactLocation}</span>
+                </li>
+              </ul>
+            </div>
+
+          </div>
+
+          {/* Bottom copyright and credentials */}
+          <div className="pt-8 border-t border-slate-100 flex flex-col md:flex-row items-center justify-between gap-4 text-[11px] text-slate-400 font-bold">
+            <p>© 2026 Clippers AI. Semua Hak Dilindungi Undang-Undang.</p>
+            <p className="flex items-center gap-1 text-[10px]">
+              Powered by high-performance FFmpeg & Whisper AI. PT Gaya Digital Globalindo.
+            </p>
           </div>
         </div>
       </footer>
+
+      <LoginModal 
+        isOpen={isLoginModalOpen} 
+        onClose={() => setIsLoginModalOpen(false)} 
+        initialMode={modalMode}
+      />
 
     </div>
   )

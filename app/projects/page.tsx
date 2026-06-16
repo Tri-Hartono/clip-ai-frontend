@@ -18,6 +18,7 @@ export default function ProjectsPage() {
         // Mapping elements into GORM entities
         const mapped = response.data.map((item: any) => ({
           id: item.id,
+          uuid: item.uuid,
           title: item.title,
           status: item.status,
           originalPath: item.originalPath,
@@ -70,6 +71,7 @@ export default function ProjectsPage() {
         const response = await api.get("/api/videos")
         const mapped = response.data.map((item: any) => ({
           id: item.id,
+          uuid: item.uuid,
           title: item.title,
           status: item.status,
           originalPath: item.originalPath,
@@ -92,11 +94,15 @@ export default function ProjectsPage() {
       <Sidebar />
 
       <main className="flex-1 p-4 md:p-8 pb-24 md:pb-8 overflow-y-auto max-h-screen">
-        <div className="flex items-center justify-between mb-8 pb-6 border-b border-slate-200/60">
-          <div>
-            <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">Klip Video Saya</h1>
-            <p className="text-sm text-slate-500 font-semibold mt-0.5">Kelola dan potong video YouTube/lokal Anda dengan subtitle otomatis.</p>
-          </div>
+        {/* Top welcome banner with green-mesh gradient background */}
+        <div className="relative bg-gradient-to-r from-[#025a50] to-[#01423a] text-white rounded-3xl p-6 md:p-8 shadow-xl overflow-hidden mb-8 border border-emerald-900/50">
+          <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-400/10 rounded-full blur-2xl pointer-events-none" />
+          <h1 className="text-xl md:text-2xl font-black tracking-tight leading-tight">
+            Klip Video Saya
+          </h1>
+          <p className="text-xs text-slate-300 font-medium mt-1.5 max-w-xl">
+            Kelola dan potong video YouTube/lokal Anda dengan subtitle otomatis.
+          </p>
         </div>
 
         {loading ? (

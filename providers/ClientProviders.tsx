@@ -2,6 +2,7 @@
 
 import React, { useState } from "react"
 import { AuthProvider } from "@/providers/AuthProvider"
+import { BrandingProvider } from "@/providers/BrandingProvider"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 
 export function ClientProviders({ children }: { children: React.ReactNode }) {
@@ -17,8 +18,11 @@ export function ClientProviders({ children }: { children: React.ReactNode }) {
   return (
     <AuthProvider>
       <QueryClientProvider client={queryClient}>
-        {children}
+        <BrandingProvider>
+          {children}
+        </BrandingProvider>
       </QueryClientProvider>
     </AuthProvider>
   )
 }
+

@@ -2,6 +2,7 @@ import { create } from "zustand"
 
 export interface VideoProject {
   id: number
+  uuid?: string
   title: string
   status: string
   originalPath: string

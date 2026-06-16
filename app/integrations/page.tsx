@@ -91,16 +91,16 @@ export default function IntegrationsPage() {
       <Sidebar />
 
       <main className="flex-1 flex flex-col max-h-screen overflow-y-auto pb-16 md:pb-0">
-        <div className="h-16 border-b border-slate-200/60 px-6 flex items-center justify-between bg-white shrink-0 shadow-sm z-10">
-          <div className="flex items-center gap-3">
-            <h1 className="text-xl font-extrabold text-slate-900 tracking-tight">Social Integrations</h1>
-          </div>
-        </div>
-
         <div className="p-6 md:p-8 max-w-4xl mx-auto w-full">
-          <div className="mb-8">
-            <h2 className="text-2xl font-black text-slate-900 mb-2">Connect Your Accounts</h2>
-            <p className="text-slate-500 font-medium">Link your social media accounts to directly publish AI-generated clips with one click.</p>
+          {/* Top welcome banner with green-mesh gradient background */}
+          <div className="relative bg-gradient-to-r from-[#025a50] to-[#01423a] text-white rounded-3xl p-6 md:p-8 shadow-xl overflow-hidden mb-8 border border-emerald-900/50">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-400/10 rounded-full blur-2xl pointer-events-none" />
+            <h1 className="text-xl md:text-2xl font-black tracking-tight leading-tight">
+              Integrasi Sosial
+            </h1>
+            <p className="text-xs text-slate-300 font-medium mt-1.5 max-w-xl">
+              Hubungkan akun media sosial Anda untuk menerbitkan klip AI buatan Clippers secara instan dengan satu klik.
+            </p>
           </div>
 
           {error && (
@@ -141,7 +141,7 @@ export default function IntegrationsPage() {
               ) : (
                 <button
                   onClick={handleConnectYoutube}
-                  className="w-full py-3.5 bg-slate-900 hover:bg-slate-800 text-white rounded-2xl font-bold transition-all flex items-center justify-center gap-2 active:scale-95 cursor-pointer"
+                  className="w-full py-3.5 bg-brand hover:bg-brand-dark text-white rounded-2xl font-bold transition-all flex items-center justify-center gap-2 active:scale-95 cursor-pointer shadow-sm shadow-brand/10"
                 >
                   <Link2 className="w-5 h-5" />
                   Connect YouTube
@@ -179,7 +179,7 @@ export default function IntegrationsPage() {
               ) : (
                 <button
                   onClick={handleConnectTiktok}
-                  className="w-full py-3.5 bg-slate-900 hover:bg-slate-800 text-white rounded-2xl font-bold transition-all flex items-center justify-center gap-2 active:scale-95 cursor-pointer"
+                  className="w-full py-3.5 bg-brand hover:bg-brand-dark text-white rounded-2xl font-bold transition-all flex items-center justify-center gap-2 active:scale-95 cursor-pointer shadow-sm shadow-brand/10"
                 >
                   <Link2 className="w-5 h-5" />
                   Connect TikTok
@@ -217,7 +217,7 @@ export default function IntegrationsPage() {
               ) : (
                 <button
                   onClick={handleConnectFacebook}
-                  className="w-full py-3.5 bg-slate-900 hover:bg-slate-800 text-white rounded-2xl font-bold transition-all flex items-center justify-center gap-2 active:scale-95 cursor-pointer"
+                  className="w-full py-3.5 bg-brand hover:bg-brand-dark text-white rounded-2xl font-bold transition-all flex items-center justify-center gap-2 active:scale-95 cursor-pointer shadow-sm shadow-brand/10"
                 >
                   <Link2 className="w-5 h-5" />
                   Connect Facebook

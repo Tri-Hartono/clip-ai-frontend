@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Plus, Trash2, Edit2, Check, Layers, Sparkles } from "lucide-react"
 
 export interface SubtitleItem {
@@ -34,6 +34,17 @@ export default function SubtitleEditor({ initialSubtitles, onSave, onClipGenerat
           { id: 2, startTime: "00:00:04,500", endTime: "00:00:08,000", text: "Enjoy advanced high-performance web timeline trimming." }
         ]
   )
+
+  useEffect(() => {
+    if (initialSubtitles) {
+      const initialStr = JSON.stringify(initialSubtitles)
+      const currentStr = JSON.stringify(subtitles)
+      if (initialStr !== currentStr) {
+        setSubtitles(initialSubtitles)
+      }
+    }
+  }, [initialSubtitles])
+
   const [editingId, setEditingId] = useState<number | null>(null)
   const [editingText, setEditingText] = useState("")
 

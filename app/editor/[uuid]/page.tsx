@@ -1,6 +1,6 @@
 "use client"
 
-import { useParams, useRouter } from "next/navigation"
+import { useParams, useRouter, useSearchParams } from "next/navigation"
 import { useEffect, useState, useRef, useCallback } from "react"
 import Sidebar from "@/components/Sidebar"
 import SubtitleEditor, { SubtitleItem } from "@/components/SubtitleEditor"
@@ -15,7 +15,11 @@ import { api } from "@/services/api"
 export default function EditorPage() {
   const params = useParams()
   const router = useRouter()
-  const id = params.id
+  const searchParams = useSearchParams()
+  const id = params.uuid || params.id
+  
+  const startParam = searchParams.get("start")
+  const endParam = searchParams.get("end")
   
   const [video, setVideo] = useState<any>(null)
   const [subtitles, setSubtitles] = useState<SubtitleItem[]>([])
@@ -103,6 +107,9 @@ export default function EditorPage() {
   const [captionOutline, setCaptionOutline] = useState(2.5)
   const [captionMarginV, setCaptionMarginV] = useState(30)
   const [singleWordMode, setSingleWordMode] = useState(true)
+  const [useFaceAI, setUseFaceAI] = useState(false)
+  const [captionBackground, setCaptionBackground] = useState(false)
+  const [captionFontname, setCaptionFontname] = useState("Impact")
 
   useEffect(() => {
     if (clipFormat === "portrait") {
@@ -113,6 +120,9 @@ export default function EditorPage() {
       setCaptionFontsize(20)
       setCaptionOutline(2.5)
       setCaptionMarginV(30)
+      if (videoRef.current) {
+        videoRef.current.style.objectPosition = "center"
+      }
     }
   }, [clipFormat])
 
@@ -128,20 +138,27 @@ export default function EditorPage() {
 
   // 60FPS Live Preview Panning using requestAnimationFrame
   useEffect(() => {
-    if (!isPlaying || clipFormat !== "portrait" || !trackingData || trackingData.length === 0) {
+    if (clipFormat !== "portrait" || !useFaceAI || !trackingData || trackingData.length === 0) {
       if (animationRef.current) cancelAnimationFrame(animationRef.current)
+      if (clipFormat === "portrait" && !useFaceAI && videoRef.current) {
+        videoRef.current.style.objectPosition = "center"
+      }
       return
     }
 
     const updatePosition = () => {
-      if (!videoRef.current) return
+      if (!videoRef.current) {
+        animationRef.current = requestAnimationFrame(updatePosition)
+        return
+      }
       
       const curTime = videoRef.current.currentTime
       
-      // Binary search
+      // Binary search to find enclosing frames
       let low = 0
       let high = trackingData.length - 1
       let mid = 0
+      let found = false
       while (low <= high) {
         mid = Math.floor((low + high) / 2)
         if (trackingData[mid].t < curTime) {
@@ -149,28 +166,28 @@ export default function EditorPage() {
         } else if (trackingData[mid].t > curTime) {
           high = mid - 1
         } else {
+          found = true
           break
         }
       }
       
-      // Interpolate for buttery smoothness
-      let point1 = trackingData[mid]
-      let point2 = trackingData[mid]
-      
-      if (point1.t <= curTime && mid < trackingData.length - 1) {
-         point2 = trackingData[mid + 1]
-      } else if (point1.t > curTime && mid > 0) {
-         point1 = trackingData[mid - 1]
-         point2 = trackingData[mid]
+      let point1, point2
+      if (found) {
+        point1 = trackingData[mid]
+        point2 = trackingData[mid]
+      } else {
+        const idx1 = Math.max(0, Math.min(trackingData.length - 1, high))
+        const idx2 = Math.max(0, Math.min(trackingData.length - 1, low))
+        point1 = trackingData[idx1]
+        point2 = trackingData[idx2]
       }
       
       let p = point1.p
       if (point2.t > point1.t) {
         // Linear interpolation between the two closest frames
         const ratio = (curTime - point1.t) / (point2.t - point1.t)
-        // Add a bit of easing out for extremely fast head turns using easeOutCubic
-        // but linear is usually better for direct tracking, since the tracking data is already EMA smoothed!
-        p = point1.p + (point2.p - point1.p) * ratio
+        const clampedRatio = Math.max(0, Math.min(1, ratio))
+        p = point1.p + (point2.p - point1.p) * clampedRatio
       }
       
       videoRef.current.style.objectPosition = `${p}% center`
@@ -183,14 +200,14 @@ export default function EditorPage() {
     return () => {
       if (animationRef.current) cancelAnimationFrame(animationRef.current)
     }
-  }, [isPlaying, clipFormat, trackingData])
+  }, [clipFormat, useFaceAI, trackingData])
 
   useEffect(() => {
-    if (clipFormat === "portrait" && !trackingData && !isTrackingLoading && video?.id) {
+    if (clipFormat === "portrait" && useFaceAI && !trackingData && !isTrackingLoading && video?.id) {
       const fetchTracking = async () => {
         setIsTrackingLoading(true)
         try {
-          const res = await api.get(`/api/videos/${id}/tracking`)
+          const res = await api.get(`/api/videos/${id}/tracking?t=${Date.now()}`)
           if (res.data && res.data.data) {
             setTrackingData(res.data.data)
           }
@@ -202,7 +219,7 @@ export default function EditorPage() {
       }
       fetchTracking()
     }
-  }, [clipFormat, trackingData, isTrackingLoading, id, video])
+  }, [clipFormat, useFaceAI, trackingData, isTrackingLoading, id, video?.id])
 
   // Recovery Draft States
   const [showRecoveryModal, setShowRecoveryModal] = useState(false)
@@ -276,7 +293,8 @@ export default function EditorPage() {
           wmImage,
           wmOpacity,
           wmScale,
-          wmPosition
+          wmPosition,
+          useFaceAI
         }
         await api.put(`/api/videos/${id}/draft`, { draftState: JSON.stringify(draftObj) })
       } catch (err) {
@@ -284,14 +302,20 @@ export default function EditorPage() {
       }
     }, 2000)
 
-  }, [subtitles, clips, clipFormat, selectedColor, captionUppercase, captionFontsize, captionOutline, captionMarginV, wmImage, wmOpacity, wmScale, wmPosition, showRecoveryModal])
+  }, [subtitles, clips, clipFormat, selectedColor, captionUppercase, captionFontsize, captionOutline, captionMarginV, wmImage, wmOpacity, wmScale, wmPosition, showRecoveryModal, useFaceAI])
 
-  const handleSubtitlesSave = (subs: SubtitleItem[]) => {
+  const handleSubtitlesSave = async (subs: SubtitleItem[]) => {
     setSubtitles(subs)
     const srt = subs.map((sub) => {
       return `${sub.id}\n${sub.startTime} --> ${sub.endTime}\n${sub.text}\n`
     }).join("\n")
     setSrtContent(srt)
+
+    try {
+      await api.put(`/api/videos/${id}/subtitles`, subs)
+    } catch (err) {
+      console.error("Failed to save edited subtitles to backend", err)
+    }
   }
 
   const formatTimeStrWithMs = (sec: number) => {
@@ -303,8 +327,17 @@ export default function EditorPage() {
   }
 
   const parseTimeStrToSeconds = (timeStr: string): number => {
-    const [sh, sm, ss] = timeStr.split(":")
-    return parseInt(sh) * 3600 + parseInt(sm) * 60 + parseFloat(ss.replace(",", "."))
+    if (!timeStr) return 0
+    const parts = timeStr.split(":")
+    if (parts.length === 3) {
+      const [sh, sm, ss] = parts
+      return parseInt(sh) * 3600 + parseInt(sm) * 60 + parseFloat(ss.replace(",", "."))
+    } else if (parts.length === 2) {
+      const [sm, ss] = parts
+      return parseInt(sm) * 60 + parseFloat(ss.replace(",", "."))
+    } else {
+      return parseFloat(timeStr.replace(",", ".")) || 0
+    }
   }
 
   const generateMappedData = (exportClips: VideoClip[], currentSubtitles: SubtitleItem[]) => {
@@ -396,10 +429,44 @@ export default function EditorPage() {
   const initClipsDone = useRef(false)
   useEffect(() => {
     if (duration > 0 && !initClipsDone.current) {
-      setClips([{ id: "clip-0", startTime: 0, endTime: duration, order: 0 }])
+      const initStart = startParam ? parseFloat(startParam) : 0
+      const initEnd = endParam ? parseFloat(endParam) : duration
+      
+      setClips([{ id: "clip-0", startTime: initStart, endTime: initEnd, order: 0 }])
+      setTrimStart(initStart)
+      setTrimEnd(initEnd)
+      
+      // Also seek playhead to start time
+      if (videoRef.current) {
+        videoRef.current.currentTime = initStart
+        setCurrentTime(initStart)
+      }
+      
       initClipsDone.current = true
     }
-  }, [duration])
+  }, [duration, startParam, endParam])
+
+  const handleLoadClipToTimeline = (startStr: string, endStr: string) => {
+    console.log("EditorPage: handleLoadClipToTimeline called with", startStr, endStr)
+    const startSec = parseTimeStrToSeconds(startStr)
+    const endSec = parseTimeStrToSeconds(endStr)
+    console.log("EditorPage: Parsed range in seconds:", startSec, endSec)
+    
+    setClips([{ id: "clip-0", startTime: startSec, endTime: endSec, order: 0 }])
+    setTrimStart(startSec)
+    setTrimEnd(endSec)
+    
+    if (videoRef.current) {
+      console.log("EditorPage: Seeking video player to:", startSec)
+      videoRef.current.currentTime = startSec
+      setCurrentTime(startSec)
+    } else {
+      console.warn("EditorPage: videoRef.current is not available!")
+    }
+
+    console.log("EditorPage: Scrolling window to top...")
+    window.scrollTo({ top: 0, behavior: "smooth" })
+  }
 
   // Split clip at current playhead position
   const handleSplitAtPlayhead = useCallback(() => {
@@ -446,6 +513,7 @@ export default function EditorPage() {
           endTime: formatTimeStrWithMs(c.endTime)
         })),
         format: clipFormat,
+        faceTracking: useFaceAI,
         color: selectedColor,
         noSubtitles: !burnSubtitles,
         uppercase: captionUppercase,
@@ -459,6 +527,8 @@ export default function EditorPage() {
           scale: wmScale,
           position: wmPosition
         } : null,
+        borderstyle: captionBackground ? 3 : 1,
+        fontname: captionFontname,
         customSrt,
         customJson,
         introOverlay: introOverlayBase64
@@ -511,6 +581,7 @@ export default function EditorPage() {
         startTime,
         endTime,
         format,
+        faceTracking: useFaceAI,
         color,
         noSubtitles: !burnSubtitles,
         uppercase: captionUppercase,
@@ -524,6 +595,8 @@ export default function EditorPage() {
           scale: wmScale,
           position: wmPosition
         } : null,
+        borderstyle: captionBackground ? 3 : 1,
+        fontname: captionFontname,
         customSrt,
         customJson,
         introOverlay: introOverlayBase64
@@ -542,7 +615,13 @@ export default function EditorPage() {
 
   const togglePlay = () => {
     if (videoRef.current) {
+      const activeClip = clips[0]
       if (videoRef.current.paused) {
+        // Enforce seeking to start of clip if playing from outside boundaries
+        if (activeClip && (videoRef.current.currentTime < activeClip.startTime || videoRef.current.currentTime >= activeClip.endTime)) {
+          videoRef.current.currentTime = activeClip.startTime
+          setCurrentTime(activeClip.startTime)
+        }
         videoRef.current.play()
         setIsPlaying(true)
       } else {
@@ -556,6 +635,20 @@ export default function EditorPage() {
     if (videoRef.current) {
       const curTime = videoRef.current.currentTime
       setCurrentTime(curTime)
+
+      // Enforce active clip bounds during preview playback
+      const activeClip = clips[0]
+      if (activeClip) {
+        if (curTime < activeClip.startTime) {
+          videoRef.current.currentTime = activeClip.startTime
+          setCurrentTime(activeClip.startTime)
+        } else if (curTime >= activeClip.endTime) {
+          videoRef.current.pause()
+          setIsPlaying(false)
+          videoRef.current.currentTime = activeClip.startTime
+          setCurrentTime(activeClip.startTime)
+        }
+      }
 
       // Dynamic Preview logic is now handled smoothly by requestAnimationFrame
       // we only reset position if not in portrait mode
@@ -658,6 +751,20 @@ export default function EditorPage() {
               <span className="text-xs font-bold text-slate-700">{burnSubtitles ? "On" : "Off"}</span>
             </label>
 
+            {/* Opsi Face AI Tracking Toggle */}
+            {clipFormat === "portrait" && (
+              <label className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 cursor-pointer active:scale-95 transition-all mr-1" title="Aktifkan kecerdasan buatan untuk melacak wajah agar tetap di tengah frame">
+                <span className="text-[9px] font-extrabold uppercase text-slate-400 tracking-wider">Face AI:</span>
+                <input 
+                  type="checkbox"
+                  checked={useFaceAI}
+                  onChange={(e) => setUseFaceAI(e.target.checked)}
+                  className="w-4 h-4 rounded text-brand focus:ring-brand accent-brand cursor-pointer"
+                />
+                <span className="text-xs font-bold text-slate-700">{useFaceAI ? "On" : "Off"}</span>
+              </label>
+            )}
+
             {/* Aspect Ratio Picker */}
             <div className="flex bg-slate-50 border border-slate-200 rounded-xl p-1 mr-1 gap-1">
               <button
@@ -747,8 +854,7 @@ export default function EditorPage() {
                       style={{
                         // Use transition for dimensions/colors, but NOT object-position 
                         // so our 60fps requestAnimationFrame doesn't stutter!
-                        transition: "width 0.5s, height 0.5s, border-radius 0.5s, background-color 0.5s",
-                        objectPosition: "center"
+                        transition: "width 0.5s, height 0.5s, border-radius 0.5s, background-color 0.5s"
                       }}
                       crossOrigin="anonymous"
                     />
@@ -806,76 +912,114 @@ export default function EditorPage() {
                       <div 
                         className={`absolute left-2 right-2 flex flex-col justify-end items-center text-center font-black tracking-wider z-20 select-none pointer-events-none transition-all duration-300 ${containerColorClass}`}
                         style={{
-                          fontFamily: 'Impact, Arial Black, sans-serif',
+                          fontFamily: `"${captionFontname}", Impact, Arial Black, sans-serif`,
                           fontSize: `${clipFormat === 'portrait' ? captionFontsize * 0.55 : captionFontsize}px`,
                           bottom: `${clipFormat === 'portrait' ? captionMarginV * 0.7 : captionMarginV}px`,
                           textTransform: captionUppercase ? 'uppercase' : 'none',
                           lineHeight: '1.2',
                           wordBreak: 'break-word',
-                          textShadow: `${captionOutline}px ${captionOutline}px 0 #000, -${captionOutline}px -${captionOutline}px 0 #000, ${captionOutline}px -${captionOutline}px 0 #000, -${captionOutline}px ${captionOutline}px 0 #000, 0 ${captionOutline}px 0 #000, 0 -${captionOutline}px 0 #000, ${captionOutline}px 0 0 #000, -${captionOutline}px 0 0 #000, 0px 0px 8px rgba(0,0,0,0.8)`
+                          textShadow: captionBackground ? 'none' : `${captionOutline}px ${captionOutline}px 0 #000, -${captionOutline}px -${captionOutline}px 0 #000, ${captionOutline}px -${captionOutline}px 0 #000, -${captionOutline}px ${captionOutline}px 0 #000, 0 ${captionOutline}px 0 #000, 0 -${captionOutline}px 0 #000, ${captionOutline}px 0 0 #000, -${captionOutline}px 0 0 #000, 0px 0px 8px rgba(0,0,0,0.8)`
                         }}
                       >
-                        {hasWords ? (
-                          singleWordMode ? (
-                            (() => {
-                              const activeWord = activeSegment.words!.find(w => currentTime >= w.start && currentTime <= w.end)
-                              if (activeWord) {
-                                return <span className={highlightColorClass}>{activeWord.word}</span>
-                              }
-                              // Fallback to the closest word before the currentTime
-                              const pastWords = activeSegment.words!.filter(w => currentTime >= w.end)
-                              if (pastWords.length > 0) {
-                                return <span className={highlightColorClass}>{pastWords[pastWords.length - 1].word}</span>
-                              }
-                              // Fallback to the first word
-                              return <span className={highlightColorClass}>{activeSegment.words![0].word}</span>
-                            })()
-                          ) : (
-                            <div className="flex flex-wrap justify-center gap-x-1.5 row-gap-1">
-                              {activeSegment.words!.map((w, idx) => {
-                                const isWordActive = currentTime >= w.start && currentTime <= w.end
-                                return (
-                                  <span
-                                    key={idx}
-                                    className={isWordActive ? highlightColorClass : "text-white"}
-                                  >
-                                    {w.word}
-                                  </span>
-                                )
-                              })}
-                            </div>
-                          )
-                        ) : activeSegment.text}
+                        <span className={captionBackground ? "bg-black/60 px-4 py-2 rounded-2xl border border-black/15 shadow-xl backdrop-blur-sm inline-block" : ""}>
+                          {hasWords ? (
+                            singleWordMode ? (
+                              (() => {
+                                const activeWord = activeSegment.words!.find(w => currentTime >= w.start && currentTime <= w.end)
+                                if (activeWord) {
+                                  return <span className={highlightColorClass}>{activeWord.word}</span>
+                                }
+                                // Fallback to the closest word before the currentTime
+                                const pastWords = activeSegment.words!.filter(w => currentTime >= w.end)
+                                if (pastWords.length > 0) {
+                                  return <span className={highlightColorClass}>{pastWords[pastWords.length - 1].word}</span>
+                                }
+                                // Fallback to the first word
+                                return <span className={highlightColorClass}>{activeSegment.words![0].word}</span>
+                              })()
+                            ) : (
+                              <div className="flex flex-wrap justify-center gap-x-1.5 row-gap-1">
+                                {activeSegment.words!.map((w, idx) => {
+                                  const isWordActive = currentTime >= w.start && currentTime <= w.end
+                                  return (
+                                    <span
+                                      key={idx}
+                                      className={isWordActive ? highlightColorClass : "text-white"}
+                                    >
+                                      {w.word}
+                                    </span>
+                                  )
+                                })}
+                              </div>
+                            )
+                          ) : activeSegment.text}
+                        </span>
                       </div>
                     )
                   })()}
                 </div>
 
-                {/* Micro Playback Bar Controls */}
-                <div className="mt-4 flex items-center justify-center gap-4 bg-white border border-slate-200/80 px-6 py-2.5 rounded-full w-full max-w-sm shadow-sm">
-                  <button 
-                    onClick={() => seekRelative(-5)}
-                    className="p-2 hover:bg-slate-50 text-slate-500 rounded-xl transition-all active:scale-90"
-                    title="Rewind 5s (Arrow Left)"
-                  >
-                    <RotateCcw className="w-4 h-4" />
-                  </button>
-                  <button 
-                    onClick={togglePlay}
-                    className="p-2 hover:bg-slate-50 text-brand rounded-xl transition-all active:scale-90"
-                  >
-                    {isPlaying ? <PauseIcon className="w-4 h-4 fill-current" /> : <PlayIcon className="w-4 h-4 fill-current" />}
-                  </button>
-                  <button 
-                    onClick={() => seekRelative(5)}
-                    className="p-2 hover:bg-slate-50 text-slate-500 rounded-xl transition-all active:scale-90"
-                    title="Forward 5s (Arrow Right)"
-                  >
-                    <RotateCw className="w-4 h-4" />
-                  </button>
-                  <span className="text-xs font-extrabold font-mono text-slate-400">
-                    {formatDurationDisplay(currentTime)} / {formatDurationDisplay(duration)}
-                  </span>
+                {/* Playback Controls & Seek Slider */}
+                <div className="mt-4 flex flex-col items-center gap-3 bg-white border border-slate-200/80 p-4 rounded-3xl w-full max-w-lg shadow-sm">
+                  {/* Slider & Time display */}
+                  {(() => {
+                    const activeClip = clips[0]
+                    const clipStart = activeClip?.startTime || 0
+                    const clipEnd = activeClip?.endTime || duration || 1
+                    const clipLen = clipEnd - clipStart
+                    const relativeCurrent = Math.max(0, currentTime - clipStart)
+
+                    return (
+                      <div className="w-full flex items-center gap-3 px-2">
+                        <input 
+                          type="range"
+                          min={clipStart}
+                          max={clipEnd}
+                          step={0.1}
+                          value={Math.max(clipStart, Math.min(currentTime, clipEnd))}
+                          onChange={(e) => {
+                            const sec = parseFloat(e.target.value)
+                            if (videoRef.current) {
+                              videoRef.current.currentTime = sec
+                              setCurrentTime(sec)
+                            }
+                          }}
+                          className="flex-1 h-1.5 bg-slate-200 hover:h-2 rounded-lg appearance-none cursor-pointer accent-brand transition-all"
+                        />
+                        <span className="text-xs font-extrabold font-mono text-slate-500 shrink-0">
+                          {formatDurationDisplay(relativeCurrent)} / {formatDurationDisplay(clipLen)}
+                        </span>
+                      </div>
+                    )
+                  })()}
+
+                  {/* Playback action buttons */}
+                  <div className="flex items-center justify-center gap-6">
+                    <button 
+                      onClick={() => seekRelative(-5)}
+                      className="px-2.5 py-1.5 hover:bg-slate-50 text-slate-500 rounded-xl transition-all active:scale-90 flex items-center gap-1"
+                      title="Rewind 5s (Arrow Left)"
+                    >
+                      <RotateCcw className="w-4 h-4" />
+                      <span className="text-[10px] font-extrabold text-slate-500">-5s</span>
+                    </button>
+                    
+                    <button 
+                      onClick={togglePlay}
+                      className="p-2.5 bg-brand hover:bg-brand/95 text-white rounded-full transition-all active:scale-95 shadow-md shadow-brand/20 flex items-center justify-center"
+                    >
+                      {isPlaying ? <PauseIcon className="w-4.5 h-4.5 fill-current" /> : <PlayIcon className="w-4.5 h-4.5 fill-current ml-0.5" />}
+                    </button>
+                    
+                    <button 
+                      onClick={() => seekRelative(5)}
+                      className="px-2.5 py-1.5 hover:bg-slate-50 text-slate-500 rounded-xl transition-all active:scale-90 flex items-center gap-1"
+                      title="Forward 5s (Arrow Right)"
+                    >
+                      <span className="text-[10px] font-extrabold text-slate-500">+5s</span>
+                      <RotateCw className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
               </div>
 
@@ -926,10 +1070,12 @@ export default function EditorPage() {
             <div className="p-8 bg-white border-t border-slate-200/60">
               <ViralClips 
                 videoId={id as string} 
+                videoPath={video?.originalPath}
                 onExtractClip={(start, end) => {
                     setPendingClipParams({ start, end, format: clipFormat, color: selectedColor })
                     setIntroModalTarget("clip")
                 }}
+                onEditClip={handleLoadClipToTimeline}
               />
             </div>
           </div>
@@ -1059,6 +1205,7 @@ export default function EditorPage() {
                       if (savedDraft.wmOpacity) setWmOpacity(savedDraft.wmOpacity)
                       if (savedDraft.wmScale) setWmScale(savedDraft.wmScale)
                       if (savedDraft.wmPosition) setWmPosition(savedDraft.wmPosition)
+                      if (savedDraft.useFaceAI !== undefined) setUseFaceAI(savedDraft.useFaceAI)
                       setShowRecoveryModal(false)
                     }}
                     className="w-full py-3 bg-brand hover:bg-brand-dark text-white rounded-xl font-bold transition-all shadow-md active:scale-95"
@@ -1080,10 +1227,13 @@ export default function EditorPage() {
           </div>
         )}
 
-        {/* Subtitle Style Customizer Modal */}
+        {/* Subtitle Style Customizer Sidebar */}
         {subtitleStyleOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 backdrop-blur-sm bg-slate-900/60 animate-in fade-in">
-            <div className="bg-white border border-slate-200/80 rounded-2xl w-full max-w-2xl shadow-2xl relative flex flex-col max-h-[90vh]">
+          <div className="fixed inset-0 z-50 flex justify-end backdrop-blur-[1px] bg-slate-900/15 pointer-events-none animate-in fade-in">
+            {/* Clickable backdrop area to close */}
+            <div className="flex-1 pointer-events-auto" onClick={() => setSubtitleStyleOpen(false)} />
+            
+            <div className="bg-white border-l border-slate-200/80 w-full max-w-md shadow-2xl relative flex flex-col h-full pointer-events-auto animate-in slide-in-from-right duration-300">
               {/* Header */}
               <div className="flex items-center justify-between p-5 border-b border-slate-100">
                 <span className="text-[12px] text-brand font-black uppercase tracking-widest flex items-center gap-1.5">
@@ -1100,7 +1250,7 @@ export default function EditorPage() {
 
               {/* Content (Scrollable) */}
               <div className="p-6 overflow-y-auto space-y-6">
-                <div className="flex items-center gap-6 justify-start bg-slate-50 p-4 rounded-xl border border-slate-100">
+                <div className="flex flex-wrap items-center gap-6 justify-start bg-slate-50 p-4 rounded-xl border border-slate-100">
                   <label className="flex items-center gap-2 cursor-pointer text-xs font-extrabold text-slate-600 select-none">
                     <input 
                       type="checkbox"
@@ -1119,6 +1269,15 @@ export default function EditorPage() {
                     />
                     <span>TEKS KAPITAL (ALL-CAPS)</span>
                   </label>
+                  <label className="flex items-center gap-2 cursor-pointer text-xs font-extrabold text-slate-600 select-none">
+                    <input 
+                      type="checkbox"
+                      checked={captionBackground}
+                      onChange={(e) => setCaptionBackground(e.target.checked)}
+                      className="w-4 h-4 rounded text-brand focus:ring-brand accent-brand cursor-pointer"
+                    />
+                    <span>BACKGROUND HITAM</span>
+                  </label>
                 </div>
 
                 {/* Preset Gaya Video Terkenal */}
@@ -1132,6 +1291,8 @@ export default function EditorPage() {
                         setCaptionFontsize(32);
                         setCaptionOutline(4.5);
                         setCaptionMarginV(50);
+                        setSingleWordMode(false);
+                        setCaptionFontname("Impact");
                       }}
                       className="px-4 py-2 bg-slate-50 border border-slate-200 hover:border-brand text-xs font-extrabold rounded-xl transition-all hover:bg-brand/5 hover:text-brand flex items-center gap-2"
                     >
@@ -1145,6 +1306,8 @@ export default function EditorPage() {
                         setCaptionFontsize(18);
                         setCaptionOutline(2.0);
                         setCaptionMarginV(25);
+                        setSingleWordMode(false);
+                        setCaptionFontname("Georgia");
                       }}
                       className="px-4 py-2 bg-slate-50 border border-slate-200 hover:border-brand text-xs font-extrabold rounded-xl transition-all hover:bg-brand/5 hover:text-brand flex items-center gap-2"
                     >
@@ -1153,11 +1316,73 @@ export default function EditorPage() {
                     </button>
                     <button
                       onClick={() => {
+                        setSelectedColor("yellow");
+                        setCaptionUppercase(true);
+                        setCaptionFontsize(35);
+                        setCaptionOutline(5.0);
+                        setCaptionMarginV(55);
+                        setSingleWordMode(true); // MrBeast rapid single-word flash
+                        setCaptionFontname("Impact");
+                      }}
+                      className="px-4 py-2 bg-slate-50 border border-slate-200 hover:border-brand text-xs font-extrabold rounded-xl transition-all hover:bg-brand/5 hover:text-brand flex items-center gap-2"
+                    >
+                      <span>🐯</span>
+                      <span>MrBeast</span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        setSelectedColor("white");
+                        setCaptionUppercase(true);
+                        setCaptionFontsize(22);
+                        setCaptionOutline(2.0);
+                        setCaptionMarginV(35);
+                        setSingleWordMode(false);
+                        setCaptionFontname("Avenir Next");
+                      }}
+                      className="px-4 py-2 bg-slate-50 border border-slate-200 hover:border-brand text-xs font-extrabold rounded-xl transition-all hover:bg-brand/5 hover:text-brand flex items-center gap-2"
+                    >
+                      <span>👔</span>
+                      <span>Iman Gadzhi</span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        setSelectedColor("green");
+                        setCaptionUppercase(true);
+                        setCaptionFontsize(26);
+                        setCaptionOutline(3.5);
+                        setCaptionMarginV(40);
+                        setSingleWordMode(false);
+                        setCaptionFontname("Arial Black");
+                      }}
+                      className="px-4 py-2 bg-slate-50 border border-slate-200 hover:border-brand text-xs font-extrabold rounded-xl transition-all hover:bg-brand/5 hover:text-brand flex items-center gap-2"
+                    >
+                      <span>🌍</span>
+                      <span>Nas Daily</span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        setSelectedColor("yellow");
+                        setCaptionUppercase(true);
+                        setCaptionFontsize(30);
+                        setCaptionOutline(4.0);
+                        setCaptionMarginV(45);
+                        setSingleWordMode(false);
+                        setCaptionFontname("Arial Black");
+                      }}
+                      className="px-4 py-2 bg-slate-50 border border-slate-200 hover:border-brand text-xs font-extrabold rounded-xl transition-all hover:bg-brand/5 hover:text-brand flex items-center gap-2"
+                    >
+                      <span>📢</span>
+                      <span>GaryVee</span>
+                    </button>
+                    <button
+                      onClick={() => {
                         setSelectedColor("cyan");
                         setCaptionUppercase(true);
                         setCaptionFontsize(28);
                         setCaptionOutline(3.5);
                         setCaptionMarginV(45);
+                        setSingleWordMode(false);
+                        setCaptionFontname("Arial Black");
                       }}
                       className="px-4 py-2 bg-slate-50 border border-slate-200 hover:border-brand text-xs font-extrabold rounded-xl transition-all hover:bg-brand/5 hover:text-brand flex items-center gap-2"
                     >
@@ -1165,6 +1390,26 @@ export default function EditorPage() {
                       <span>Karaoke Neon</span>
                     </button>
                   </div>
+                </div>
+
+                {/* Font Selection Dropdown */}
+                <div className="space-y-2 bg-slate-50 p-4 rounded-xl border border-slate-100">
+                  <span className="text-[10px] text-slate-400 font-extrabold uppercase tracking-wider block">Jenis Huruf (Font Family):</span>
+                  <select 
+                    value={captionFontname}
+                    onChange={(e) => setCaptionFontname(e.target.value)}
+                    className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-800 outline-none focus:border-brand cursor-pointer"
+                  >
+                    <option value="Impact">Impact (Bold, High Energy - Hormozi/MrBeast Style)</option>
+                    <option value="Futura">Futura (Premium Geometric Sans-Serif)</option>
+                    <option value="Avenir Next">Avenir Next (Sleek Modern Sans-Serif - Iman Gadzhi Style)</option>
+                    <option value="Helvetica Neue">Helvetica Neue (Clean, Neutral Minimalist)</option>
+                    <option value="Arial Black">Arial Black (Heavy, Clean & Clear - Nas Daily/GaryVee Style)</option>
+                    <option value="Trebuchet MS">Trebuchet MS (Solid Sans-Serif)</option>
+                    <option value="Georgia">Georgia (Premium Editorial Serif - Ali Abdaal Style)</option>
+                    <option value="Comic Sans MS">Comic Sans MS (Playful, Meme Style)</option>
+                    <option value="Courier New">Courier New (Classic Retro Typewriter)</option>
+                  </select>
                 </div>
                 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
@@ -1353,7 +1598,7 @@ export default function EditorPage() {
               </div>
 
               {/* Footer */}
-              <div className="p-5 border-t border-slate-100 bg-slate-50 rounded-b-2xl flex justify-end">
+              <div className="p-5 border-t border-slate-100 bg-slate-50 flex justify-end">
                 <button
                   onClick={() => setSubtitleStyleOpen(false)}
                   className="px-6 py-2.5 bg-brand hover:bg-brand-dark text-white rounded-xl text-xs font-extrabold shadow-md shadow-brand/20 transition-all active:scale-95"

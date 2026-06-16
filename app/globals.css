@@ -1,21 +1,36 @@
 @import "tailwindcss";
 
+/* ── Runtime-overridable brand tokens ─────────────────────────────────────────
+   BrandingProvider sets these via document.documentElement.style.setProperty()
+   Use --brand-* names here (different from Tailwind's --color-brand-*) to
+   avoid circular self-references in @theme inline below.
+────────────────────────────────────────────────────────────────────────────── */
 :root {
-  --background: #f0faf8;
-  --foreground: #0d3b35;
+  --background:    #ffffff;
+  --foreground:    #0f172a;
+
+  --brand-primary: #03897B;
+  --brand-dark:    #026b5f;
+  --brand-light:   #03897B;
+  --brand-accent:  #05b3a1;
+  --brand-soft:    #03897B;
 }
 
+/* ── Tailwind v4 theme: maps utility classes → runtime CSS vars ──────────────
+   bg-brand, text-brand, border-brand etc. will all use var(--brand-primary)
+   so JS overrides propagate instantly to every Tailwind utility class.
+────────────────────────────────────────────────────────────────────────────── */
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-  
-  --color-brand: #03897B;
-  --color-brand-dark: #026b5f;
-  --color-brand-light: #e6f7f5;
-  --color-brand-accent: #05b3a1;
-  --color-brand-soft: #ccede9;
+  --color-background:    var(--background);
+  --color-foreground:    var(--foreground);
+  --font-sans:           var(--font-geist-sans);
+  --font-mono:           var(--font-geist-mono);
+
+  --color-brand:         var(--brand-primary);
+  --color-brand-dark:    var(--brand-dark);
+  --color-brand-light:   var(--brand-light);
+  --color-brand-accent:  var(--brand-accent);
+  --color-brand-soft:    var(--brand-soft);
 
   --animate-float-slow: float-slow 8s ease-in-out infinite;
   --animate-float-medium: float-medium 5s ease-in-out infinite;

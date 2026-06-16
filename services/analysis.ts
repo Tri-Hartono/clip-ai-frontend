@@ -6,6 +6,7 @@ export interface ViralClip {
   hook_score: number
   viral_score: number
   rationale: string
+  title?: string
 }
 
 export interface RecommendedCut {
@@ -32,3 +33,17 @@ export async function fetchVideoAnalysis(videoId: string | number, model: string
   }
   return response.data as VideoAnalysis
 }
+
+export interface AIModel {
+  id: number
+  name: string
+  displayName: string
+  provider: string
+  active: boolean
+}
+
+export async function fetchActiveModels(): Promise<AIModel[]> {
+  const response = await api.get("/api/analysis-models")
+  return response.data as AIModel[]
+}
+
